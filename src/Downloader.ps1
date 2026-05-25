@@ -112,3 +112,71 @@ function Install-WPComponent {
     Save-WPState $state
     Write-WPLog "$Type $Version 安装完成"
 }
+
+function Uninstall-WPComponent {
+    param(
+        [ValidateSet('nginx','php','mysql')]
+        [string]$Type,
+        [bool]$KeepData = $false      # 仅对 mysql 有意义: 保留 data 目录到 tmp/mysql-data-backup
+    )
+
+    # 先把对应的 Windows 服务卸掉 (若已注册)
+    $svcName = switch ($Type) {
+        'nginx' { $WP_SvcNginx }
+        'php'   { $WP_SvcPhp }
+        'mysql' { $WP_SvcMysql }
+    }
+    if ($svcName -and (Get-Command Uninstall-WPService -ErrorAction SilentlyContinue)) {
+        Uninstall-WPService -Name $svcName | Out-Null
+    }
+
+    # 停止直接进程
+    switch ($Type) {
+        'nginx' { Stop-WPNginx | Out-Null }
+        'php'   { Stop-WPPhp   | Out-Null }
+        'mysql' { Stop-WPMysql | Out-Null }
+    }
+    Start-Sleep -Milliseconds 800
+
+    $dir = switch ($Type) {
+        'nginx' { $WP_NginxDir }
+        'php'   { $WP_PhpDir }
+        'mysql' { $WP_MysqlDir }
+    }
+
+    # MySQL 数据可选备份
+    if ($Type -eq 'mysql' -and $KeepData) {
+        $dataDir = Join-Path $dir 'data'
+        if (Test-Path $dataDir) {
+            $backup = Join-Path $WP_TmpDir ("mysql-data-backup-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+            Move-Item $dataDir $backup -Force
+            Write-WPLog "MySQL data 目录已备份: $backup"
+        }
+    }
+
+    if (Test-Path $dir) {
+        try {
+            Remove-Item $dir -Recurse -Force -ErrorAction Stop
+            Write-WPLog "已删除 $dir"
+        } catch {
+            # 有时进程残留导致部分文件占用, 重试一次
+            Start-Sleep -Seconds 1
+            try {
+                Remove-Item $dir -Recurse -Force -ErrorAction Stop
+            } catch {
+                Write-WPLog "删除目录失败,可能有文件被占用: $_" 'ERROR'
+                throw
+            }
+        }
+    }
+
+    $state = Get-WPState
+    switch ($Type) {
+        'nginx' { $state.nginxVersion = '' }
+        'php'   { $state.phpVersion   = '' }
+        'mysql' { $state.mysqlVersion = ''; $state.mysqlInited = $false }
+    }
+    Save-WPState $state
+    Write-WPLog "$Type 已卸载"
+    return $true
+}

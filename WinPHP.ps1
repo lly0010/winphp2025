@@ -9,6 +9,7 @@ $srcDir = Join-Path $PSScriptRoot 'src'
 . (Join-Path $srcDir 'Downloader.ps1')
 . (Join-Path $srcDir 'Services.ps1')
 . (Join-Path $srcDir 'Sites.ps1')
+. (Join-Path $srcDir 'AutoStart.ps1')
 
 Initialize-WPDirs
 
@@ -93,7 +94,7 @@ function New-ServiceBox {
     $g = New-Object System.Windows.Forms.GroupBox
     $g.Text = " $Name "
     $g.Location = New-Object System.Drawing.Point($X, 12)
-    $g.Size = New-Object System.Drawing.Size(290, 260)
+    $g.Size = New-Object System.Drawing.Size(290, 295)
     $g.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 10, [System.Drawing.FontStyle]::Bold)
 
     $statusLbl = New-Object System.Windows.Forms.Label
@@ -101,7 +102,7 @@ function New-ServiceBox {
     $statusLbl.Text = '● 未运行'
     $statusLbl.ForeColor = [System.Drawing.Color]::Gray
     $statusLbl.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 12, [System.Drawing.FontStyle]::Bold)
-    $statusLbl.Location = New-Object System.Drawing.Point(20, 35)
+    $statusLbl.Location = New-Object System.Drawing.Point(20, 30)
     $statusLbl.AutoSize = $true
     $g.Controls.Add($statusLbl)
 
@@ -110,7 +111,7 @@ function New-ServiceBox {
     $verLbl.Text = '版本: 未安装'
     $verLbl.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
     $verLbl.ForeColor = [System.Drawing.Color]::DimGray
-    $verLbl.Location = New-Object System.Drawing.Point(20, 75)
+    $verLbl.Location = New-Object System.Drawing.Point(20, 65)
     $verLbl.AutoSize = $true
     $g.Controls.Add($verLbl)
 
@@ -119,9 +120,18 @@ function New-ServiceBox {
     $portLbl.Text = ''
     $portLbl.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
     $portLbl.ForeColor = [System.Drawing.Color]::DimGray
-    $portLbl.Location = New-Object System.Drawing.Point(20, 100)
+    $portLbl.Location = New-Object System.Drawing.Point(20, 88)
     $portLbl.AutoSize = $true
     $g.Controls.Add($portLbl)
+
+    $svcLbl = New-Object System.Windows.Forms.Label
+    $svcLbl.Name = 'lblSvc'
+    $svcLbl.Text = '服务: 未注册'
+    $svcLbl.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
+    $svcLbl.ForeColor = [System.Drawing.Color]::DimGray
+    $svcLbl.Location = New-Object System.Drawing.Point(20, 111)
+    $svcLbl.AutoSize = $true
+    $g.Controls.Add($svcLbl)
 
     $btnStart = New-Object System.Windows.Forms.Button
     $btnStart.Name = 'btnStart'
@@ -147,16 +157,31 @@ function New-ServiceBox {
     $btnInstall = New-Object System.Windows.Forms.Button
     $btnInstall.Name = 'btnInstall'
     $btnInstall.Text = '安装 / 切换版本'
-    $btnInstall.Size = New-Object System.Drawing.Size(165, 30)
-    $btnInstall.Location = New-Object System.Drawing.Point(20, 195)
+    $btnInstall.Size = New-Object System.Drawing.Size(125, 30)
+    $btnInstall.Location = New-Object System.Drawing.Point(20, 188)
     $g.Controls.Add($btnInstall)
+
+    $btnUninstall = New-Object System.Windows.Forms.Button
+    $btnUninstall.Name = 'btnUninstall'
+    $btnUninstall.Text = '卸载'
+    $btnUninstall.Size = New-Object System.Drawing.Size(60, 30)
+    $btnUninstall.Location = New-Object System.Drawing.Point(150, 188)
+    $btnUninstall.ForeColor = [System.Drawing.Color]::FromArgb(180, 50, 50)
+    $g.Controls.Add($btnUninstall)
 
     $btnConfig = New-Object System.Windows.Forms.Button
     $btnConfig.Name = 'btnConfig'
-    $btnConfig.Text = '配置文件'
-    $btnConfig.Size = New-Object System.Drawing.Size(80, 30)
-    $btnConfig.Location = New-Object System.Drawing.Point(190, 195)
+    $btnConfig.Text = '配置'
+    $btnConfig.Size = New-Object System.Drawing.Size(55, 30)
+    $btnConfig.Location = New-Object System.Drawing.Point(215, 188)
     $g.Controls.Add($btnConfig)
+
+    $btnAuto = New-Object System.Windows.Forms.Button
+    $btnAuto.Name = 'btnAuto'
+    $btnAuto.Text = '注册为开机自启服务'
+    $btnAuto.Size = New-Object System.Drawing.Size(250, 32)
+    $btnAuto.Location = New-Object System.Drawing.Point(20, 232)
+    $g.Controls.Add($btnAuto)
 
     return $g
 }
@@ -169,8 +194,8 @@ $tabHome.Controls.AddRange(@($boxNginx, $boxPhp, $boxMysql))
 # 提示卡片
 $tip = New-Object System.Windows.Forms.GroupBox
 $tip.Text = ' 提示 '
-$tip.Location = New-Object System.Drawing.Point(12, 285)
-$tip.Size = New-Object System.Drawing.Size(894, 310)
+$tip.Location = New-Object System.Drawing.Point(12, 320)
+$tip.Size = New-Object System.Drawing.Size(894, 275)
 $tip.Anchor = 'Top,Left,Right,Bottom'
 $tip.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 10, [System.Drawing.FontStyle]::Bold)
 
@@ -183,16 +208,25 @@ $tipText.Text = @'
 欢迎使用 WinPHP 2025!
 
 入门四步:
-  1. 切到"PHP / Nginx / MySQL"任一标签页, 点击"安装 / 切换版本"下载组件 (首次需要联网)
-  2. 回到本页, 点击对应"启动"按钮, 或顶部"全部启动"
+  1. 在 Nginx / PHP / MySQL 三个卡片点"安装 / 切换版本"下载组件 (首次需联网)
+  2. 点击对应"启动"按钮, 或顶部"全部启动"
   3. 浏览器访问 http://localhost 验证默认欢迎页
-  4. 在"网站"标签页中添加自己的域名和目录
+  4. 在"网站"标签页添加自己的域名和目录
+
+卡片按钮说明:
+  • 启动 / 停止 / 重启 — 控制对应服务
+  • 安装 / 切换版本 — 下载并替换 (会先停止该服务)
+  • 卸载 — 移除该组件,同时卸载注册的 Windows 服务 (MySQL 会询问是否保留 data)
+  • 配置 — 直接编辑配置文件
+  • 注册为开机自启服务 — 调用 NSSM 注册为 Windows 服务
+
+一键自启:
+  • 切到"自启动"标签页, 点"一键启用全部" — NSSM 自动下载, 三大组件全部注册为服务, 面板也加入登录自启动
 
 提示:
-  • 建议以管理员身份运行面板, 否则无法自动写入 hosts 文件
-  • 默认 MySQL root 密码为空, 安装后请在"MySQL"标签页修改
-  • 全部数据(组件、网站、数据库)位于面板根目录, 可整体迁移
-  • 日志在"日志"标签页查看, 服务日志在各组件目录的 logs/ 下
+  • 必须以管理员身份运行 (WinPHP.bat 自动请求)
+  • 默认 MySQL root 密码为空, 请在"数据库"标签页修改
+  • 全部数据位于面板根目录, 可整体迁移到 U 盘
 '@
 $tip.Controls.Add($tipText)
 $tabHome.Controls.Add($tip)
@@ -337,14 +371,16 @@ function Show-ConfigEditor {
 # ============================================================
 function Refresh-WPHomeStatus {
     $items = @(
-        @{ Box = $boxNginx; Status = Get-WPNginxStatus; Port = 80 },
-        @{ Box = $boxPhp;   Status = Get-WPPhpStatus;   Port = 9000 },
-        @{ Box = $boxMysql; Status = Get-WPMysqlStatus; Port = 3306 }
+        @{ Box = $boxNginx; Status = Get-WPNginxStatus; Port = 80;   Type = 'nginx' },
+        @{ Box = $boxPhp;   Status = Get-WPPhpStatus;   Port = 9000; Type = 'php'   },
+        @{ Box = $boxMysql; Status = Get-WPMysqlStatus; Port = 3306; Type = 'mysql' }
     )
     foreach ($it in $items) {
         $lblS = $it.Box.Controls['lblStatus']
         $lblV = $it.Box.Controls['lblVer']
         $lblP = $it.Box.Controls['lblPort']
+        $lblSv = $it.Box.Controls['lblSvc']
+        $btnAuto = $it.Box.Controls['btnAuto']
         if ($it.Status.Running) {
             $lblS.Text = '● 运行中'
             $lblS.ForeColor = [System.Drawing.Color]::FromArgb(60, 170, 60)
@@ -358,7 +394,64 @@ function Refresh-WPHomeStatus {
             $lblV.Text = "版本: $($it.Status.Version)"
         }
         $lblP.Text = "端口: $($it.Port)"
+        if ($it.Status.ServiceInstalled) {
+            $lblSv.Text = '服务: 已注册 (开机自启)'
+            $lblSv.ForeColor = [System.Drawing.Color]::FromArgb(60, 170, 60)
+            $btnAuto.Text = '取消开机自启 (卸载服务)'
+        } else {
+            $lblSv.Text = '服务: 未注册'
+            $lblSv.ForeColor = [System.Drawing.Color]::DimGray
+            $btnAuto.Text = '注册为开机自启服务'
+        }
     }
+}
+
+# ---- 卸载组件 ----
+function Invoke-WPUninstallComponent {
+    param([string]$Type, [string]$DisplayName)
+
+    if ($Type -eq 'mysql') {
+        $r = [System.Windows.Forms.MessageBox]::Show(
+            "即将卸载 MySQL.`n`n是否保留 data 目录? (备份到 tmp/mysql-data-backup-*)`n点【是】=保留 / 【否】=一并删除 / 【取消】=放弃",
+            '卸载 MySQL', 'YesNoCancel', 'Warning')
+        if ($r -eq 'Cancel') { return }
+        $keep = ($r -eq 'Yes')
+    } else {
+        $r = [System.Windows.Forms.MessageBox]::Show(
+            "确认卸载 $DisplayName? 对应 bin/ 目录将被删除.",
+            "卸载 $DisplayName", 'YesNo', 'Warning')
+        if ($r -ne 'Yes') { return }
+        $keep = $false
+    }
+    Set-WPStatus "正在卸载 $DisplayName..."
+    try {
+        Uninstall-WPComponent -Type $Type -KeepData $keep
+        [System.Windows.Forms.MessageBox]::Show("$DisplayName 已卸载", '完成', 'OK', 'Information') | Out-Null
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("卸载失败: $_", '错误', 'OK', 'Error') | Out-Null
+    }
+    Refresh-WPHomeStatus
+    Set-WPStatus '就绪'
+}
+
+# ---- 单组件 注册/取消 开机自启服务 ----
+function Invoke-WPToggleAutoStart {
+    param([string]$Type, [string]$ServiceName, [scriptblock]$Installer)
+    Set-WPStatus "正在切换 $ServiceName 自启动状态..."
+    if ((Get-WPServiceInfo $ServiceName).Installed) {
+        if (Uninstall-WPService -Name $ServiceName) {
+            Set-WPStatus "$ServiceName 服务已卸载"
+        }
+    } else {
+        try {
+            & $Installer
+            Set-WPStatus "$ServiceName 服务已注册并设为开机自启"
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show("注册服务失败: $_", '错误', 'OK', 'Error') | Out-Null
+        }
+    }
+    Refresh-WPHomeStatus
+    if (Get-Command Refresh-WPAutoStartList -ErrorAction SilentlyContinue) { Refresh-WPAutoStartList }
 }
 
 # 首页按钮事件绑定
@@ -366,19 +459,31 @@ $boxNginx.Controls['btnStart'].Add_Click({ Set-WPStatus '正在启动 Nginx...';
 $boxNginx.Controls['btnStop'].Add_Click({ Set-WPStatus '正在停止 Nginx...'; Stop-WPNginx | Out-Null; Refresh-WPHomeStatus; Set-WPStatus '就绪' })
 $boxNginx.Controls['btnRestart'].Add_Click({ Set-WPStatus '正在重启 Nginx...'; Restart-WPNginx | Out-Null; Refresh-WPHomeStatus; Set-WPStatus '就绪' })
 $boxNginx.Controls['btnInstall'].Add_Click({ Show-InstallDialog -Type 'nginx' })
+$boxNginx.Controls['btnUninstall'].Add_Click({ Invoke-WPUninstallComponent -Type 'nginx' -DisplayName 'Nginx' })
 $boxNginx.Controls['btnConfig'].Add_Click({ Show-ConfigEditor -FilePath (Join-Path $WP_NginxDir 'conf\nginx.conf') -Title 'nginx.conf' })
+$boxNginx.Controls['btnAuto'].Add_Click({
+    Invoke-WPToggleAutoStart -Type 'nginx' -ServiceName $Global:WP_SvcNginx -Installer { Install-WPServiceNginx | Out-Null }
+})
 
 $boxPhp.Controls['btnStart'].Add_Click({ Set-WPStatus '正在启动 PHP-CGI...'; Start-WPPhp | Out-Null; Refresh-WPHomeStatus; Set-WPStatus '就绪' })
 $boxPhp.Controls['btnStop'].Add_Click({ Set-WPStatus '正在停止 PHP-CGI...'; Stop-WPPhp | Out-Null; Refresh-WPHomeStatus; Set-WPStatus '就绪' })
 $boxPhp.Controls['btnRestart'].Add_Click({ Set-WPStatus '正在重启 PHP-CGI...'; Restart-WPPhp | Out-Null; Refresh-WPHomeStatus; Set-WPStatus '就绪' })
 $boxPhp.Controls['btnInstall'].Add_Click({ Show-InstallDialog -Type 'php' })
+$boxPhp.Controls['btnUninstall'].Add_Click({ Invoke-WPUninstallComponent -Type 'php' -DisplayName 'PHP' })
 $boxPhp.Controls['btnConfig'].Add_Click({ Show-ConfigEditor -FilePath (Join-Path $WP_PhpDir 'php.ini') -Title 'php.ini' })
+$boxPhp.Controls['btnAuto'].Add_Click({
+    Invoke-WPToggleAutoStart -Type 'php' -ServiceName $Global:WP_SvcPhp -Installer { Install-WPServicePhp | Out-Null }
+})
 
 $boxMysql.Controls['btnStart'].Add_Click({ Set-WPStatus '正在启动 MySQL...'; Start-WPMysql | Out-Null; Refresh-WPHomeStatus; Set-WPStatus '就绪' })
 $boxMysql.Controls['btnStop'].Add_Click({ Set-WPStatus '正在停止 MySQL...'; Stop-WPMysql | Out-Null; Refresh-WPHomeStatus; Set-WPStatus '就绪' })
 $boxMysql.Controls['btnRestart'].Add_Click({ Set-WPStatus '正在重启 MySQL...'; Restart-WPMysql | Out-Null; Refresh-WPHomeStatus; Set-WPStatus '就绪' })
 $boxMysql.Controls['btnInstall'].Add_Click({ Show-InstallDialog -Type 'mysql' })
+$boxMysql.Controls['btnUninstall'].Add_Click({ Invoke-WPUninstallComponent -Type 'mysql' -DisplayName 'MySQL' })
 $boxMysql.Controls['btnConfig'].Add_Click({ Show-ConfigEditor -FilePath (Join-Path $WP_MysqlDir 'my.ini') -Title 'my.ini' })
+$boxMysql.Controls['btnAuto'].Add_Click({
+    Invoke-WPToggleAutoStart -Type 'mysql' -ServiceName $Global:WP_SvcMysql -Installer { Install-WPServiceMysql | Out-Null }
+})
 
 $btnStartAll.Add_Click({
     Set-WPStatus '正在启动全部服务...'
@@ -795,7 +900,194 @@ $tabTools.Controls.AddRange(@(
 ))
 
 # ============================================================
-# Tab 5: 日志
+# Tab 5: 自启动 (开机自动运行)
+# ============================================================
+$tabAuto = New-Object System.Windows.Forms.TabPage
+$tabAuto.Text = '  自启动  '
+$tabAuto.Padding = New-Object System.Windows.Forms.Padding(12)
+$tabs.TabPages.Add($tabAuto)
+
+# 顶部一键区
+$autoTop = New-Object System.Windows.Forms.GroupBox
+$autoTop.Text = ' 一键设置 '
+$autoTop.Location = New-Object System.Drawing.Point(12, 12)
+$autoTop.Size = New-Object System.Drawing.Size(900, 110)
+$autoTop.Anchor = 'Top,Left,Right'
+$autoTop.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 10, [System.Drawing.FontStyle]::Bold)
+
+$btnAllOn = New-Object System.Windows.Forms.Button
+$btnAllOn.Text = '✓ 一键启用全部开机自启'
+$btnAllOn.Size = New-Object System.Drawing.Size(260, 50)
+$btnAllOn.Location = New-Object System.Drawing.Point(20, 38)
+$btnAllOn.BackColor = [System.Drawing.Color]::FromArgb(45, 116, 184)
+$btnAllOn.ForeColor = [System.Drawing.Color]::White
+$btnAllOn.FlatStyle = 'Flat'
+$btnAllOn.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 11, [System.Drawing.FontStyle]::Bold)
+$autoTop.Controls.Add($btnAllOn)
+
+$btnAllOff = New-Object System.Windows.Forms.Button
+$btnAllOff.Text = '✗ 一键禁用全部开机自启'
+$btnAllOff.Size = New-Object System.Drawing.Size(260, 50)
+$btnAllOff.Location = New-Object System.Drawing.Point(290, 38)
+$btnAllOff.FlatStyle = 'Flat'
+$btnAllOff.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 11, [System.Drawing.FontStyle]::Bold)
+$autoTop.Controls.Add($btnAllOff)
+
+$lblTopHint = New-Object System.Windows.Forms.Label
+$lblTopHint.Text = "首次启用会自动从 nssm.cc 下载 NSSM (约 200KB), 之后即可完全开机自启."
+$lblTopHint.Location = New-Object System.Drawing.Point(565, 55)
+$lblTopHint.Size = New-Object System.Drawing.Size(320, 40)
+$lblTopHint.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
+$lblTopHint.ForeColor = [System.Drawing.Color]::DimGray
+$autoTop.Controls.Add($lblTopHint)
+$tabAuto.Controls.Add($autoTop)
+
+# 列表区
+$autoList = New-Object System.Windows.Forms.GroupBox
+$autoList.Text = ' 各项状态 (可单独切换) '
+$autoList.Location = New-Object System.Drawing.Point(12, 130)
+$autoList.Size = New-Object System.Drawing.Size(900, 320)
+$autoList.Anchor = 'Top,Left,Right,Bottom'
+$autoList.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 10, [System.Drawing.FontStyle]::Bold)
+$tabAuto.Controls.Add($autoList)
+
+# 4 行: 面板 / Nginx / PHP / MySQL
+$script:autoRows = @{}
+function New-AutoRow {
+    param([string]$Key, [string]$Label, [int]$Y)
+    $lblName = New-Object System.Windows.Forms.Label
+    $lblName.Text = $Label
+    $lblName.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 10, [System.Drawing.FontStyle]::Bold)
+    $lblName.Location = New-Object System.Drawing.Point(20, $Y)
+    $lblName.Size = New-Object System.Drawing.Size(220, 28)
+
+    $lblStat = New-Object System.Windows.Forms.Label
+    $lblStat.Text = '未启用'
+    $lblStat.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 10)
+    $lblStat.Location = New-Object System.Drawing.Point(250, $Y)
+    $lblStat.Size = New-Object System.Drawing.Size(380, 28)
+
+    $btn = New-Object System.Windows.Forms.Button
+    $btn.Text = '启用'
+    $btn.Size = New-Object System.Drawing.Size(100, 30)
+    $btn.Location = New-Object System.Drawing.Point(650, ($Y - 4))
+
+    $autoList.Controls.AddRange(@($lblName, $lblStat, $btn))
+    $script:autoRows[$Key] = @{ Name = $lblName; Stat = $lblStat; Btn = $btn }
+}
+
+New-AutoRow -Key 'panel' -Label 'WinPHP 面板 (开机自启)' -Y 38
+New-AutoRow -Key 'nginx' -Label 'Nginx 服务'             -Y 88
+New-AutoRow -Key 'php'   -Label 'PHP-CGI 服务'           -Y 138
+New-AutoRow -Key 'mysql' -Label 'MySQL 服务'             -Y 188
+
+$lblFoot = New-Object System.Windows.Forms.Label
+$lblFoot.Text = "说明: 启用面板自启 = 任务计划程序登录时启动 WinPHP.bat (无 UAC 弹窗)`n      启用三大服务 = 通过 NSSM 注册为 Windows 服务, 在系统启动时由 services.msc 拉起"
+$lblFoot.Location = New-Object System.Drawing.Point(20, 240)
+$lblFoot.Size = New-Object System.Drawing.Size(860, 50)
+$lblFoot.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
+$lblFoot.ForeColor = [System.Drawing.Color]::DimGray
+$autoList.Controls.Add($lblFoot)
+
+function Refresh-WPAutoStartList {
+    # 面板
+    $r = $script:autoRows['panel']
+    if (Get-WPPanelAutoStartStatus) {
+        $r.Stat.Text = '✓ 已启用 (任务: ' + $WP_TaskName + ')'
+        $r.Stat.ForeColor = [System.Drawing.Color]::FromArgb(60, 170, 60)
+        $r.Btn.Text = '禁用'
+    } else {
+        $r.Stat.Text = '✗ 未启用'
+        $r.Stat.ForeColor = [System.Drawing.Color]::Gray
+        $r.Btn.Text = '启用'
+    }
+
+    $svcMap = @{
+        'nginx' = @{ Name = $WP_SvcNginx; Exe = (Join-Path $WP_NginxDir 'nginx.exe') }
+        'php'   = @{ Name = $WP_SvcPhp;   Exe = (Join-Path $WP_PhpDir   'php-cgi.exe') }
+        'mysql' = @{ Name = $WP_SvcMysql; Exe = (Join-Path $WP_MysqlDir 'bin\mysqld.exe') }
+    }
+    foreach ($k in @('nginx','php','mysql')) {
+        $r = $script:autoRows[$k]
+        $info = Get-WPServiceInfo $svcMap[$k].Name
+        if (-not (Test-Path $svcMap[$k].Exe)) {
+            $r.Stat.Text = '组件未安装,请先到首页安装'
+            $r.Stat.ForeColor = [System.Drawing.Color]::FromArgb(180, 80, 80)
+            $r.Btn.Text = '启用'
+            $r.Btn.Enabled = $false
+            continue
+        }
+        $r.Btn.Enabled = $true
+        if ($info.Installed) {
+            $r.Stat.Text = "✓ 已注册 ($($info.Status), $($info.StartType))"
+            $r.Stat.ForeColor = [System.Drawing.Color]::FromArgb(60, 170, 60)
+            $r.Btn.Text = '禁用'
+        } else {
+            $r.Stat.Text = '✗ 未注册'
+            $r.Stat.ForeColor = [System.Drawing.Color]::Gray
+            $r.Btn.Text = '启用'
+        }
+    }
+}
+
+# 单项切换按钮
+$autoRows['panel'].Btn.Add_Click({
+    if (Get-WPPanelAutoStartStatus) { Disable-WPPanelAutoStart | Out-Null } else { Enable-WPPanelAutoStart | Out-Null }
+    Refresh-WPAutoStartList
+})
+$autoRows['nginx'].Btn.Add_Click({
+    if ((Get-WPServiceInfo $WP_SvcNginx).Installed) { Uninstall-WPService $WP_SvcNginx | Out-Null }
+    else { Install-WPServiceNginx | Out-Null }
+    Refresh-WPAutoStartList; Refresh-WPHomeStatus
+})
+$autoRows['php'].Btn.Add_Click({
+    if ((Get-WPServiceInfo $WP_SvcPhp).Installed) { Uninstall-WPService $WP_SvcPhp | Out-Null }
+    else { Install-WPServicePhp | Out-Null }
+    Refresh-WPAutoStartList; Refresh-WPHomeStatus
+})
+$autoRows['mysql'].Btn.Add_Click({
+    if ((Get-WPServiceInfo $WP_SvcMysql).Installed) { Uninstall-WPService $WP_SvcMysql | Out-Null }
+    else { Install-WPServiceMysql | Out-Null }
+    Refresh-WPAutoStartList; Refresh-WPHomeStatus
+})
+
+# 一键按钮
+$btnAllOn.Add_Click({
+    Set-WPStatus '正在启用全部开机自启 (首次会下载 NSSM)...'
+    $btnAllOn.Enabled = $false; $btnAllOff.Enabled = $false
+    try {
+        $r = Enable-WPAllAutoStart
+        $msg = @()
+        $msg += "面板自启: $(if ($r.Panel) {'✓ 已启用'} else {'✗ 失败'})"
+        foreach ($t in 'Nginx','Php','Mysql') {
+            if ($r[$t] -eq $null) { $msg += "$t : (组件未安装, 跳过)" }
+            elseif ($r[$t])       { $msg += "$t : ✓ 已注册" }
+            else                  { $msg += "$t : ✗ 失败" }
+        }
+        [System.Windows.Forms.MessageBox]::Show(($msg -join "`n"), '完成', 'OK', 'Information') | Out-Null
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("操作失败: $_", '错误', 'OK', 'Error') | Out-Null
+    } finally {
+        $btnAllOn.Enabled = $true; $btnAllOff.Enabled = $true
+    }
+    Refresh-WPAutoStartList; Refresh-WPHomeStatus
+    Set-WPStatus '就绪'
+})
+
+$btnAllOff.Add_Click({
+    $r = [System.Windows.Forms.MessageBox]::Show(
+        '将卸载已注册的 Nginx / PHP / MySQL 服务并禁用面板自启动. 已运行的服务会被停止. 继续?',
+        '确认', 'YesNo', 'Question')
+    if ($r -ne 'Yes') { return }
+    Set-WPStatus '正在禁用全部开机自启...'
+    Disable-WPAllAutoStart | Out-Null
+    Refresh-WPAutoStartList; Refresh-WPHomeStatus
+    Set-WPStatus '就绪'
+    [System.Windows.Forms.MessageBox]::Show('已禁用全部开机自启', '完成', 'OK', 'Information') | Out-Null
+})
+
+# ============================================================
+# Tab 6: 日志
 # ============================================================
 $tabLog = New-Object System.Windows.Forms.TabPage
 $tabLog.Text = '  日志  '
@@ -838,6 +1130,7 @@ $timer.Add_Tick({
     try {
         Refresh-WPHomeStatus
         Refresh-WPDbInfo
+        Refresh-WPAutoStartList
     } catch {}
 })
 $timer.Start()
@@ -846,9 +1139,10 @@ $form.Add_Shown({
     Refresh-WPHomeStatus
     Refresh-WPSitesList
     Refresh-WPDbInfo
+    Refresh-WPAutoStartList
     Write-WPLog "WinPHP 启动. 根目录: $WP_Root"
     if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        Write-WPLog '当前非管理员模式. 自动写入 hosts 等功能将无法使用.' 'WARN'
+        Write-WPLog '当前非管理员模式. 自动写入 hosts / 注册服务等功能将无法使用.' 'WARN'
     }
 })
 

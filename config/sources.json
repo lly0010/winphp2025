@@ -1,5 +1,10 @@
 {
   "_comment": "可下载的组件版本清单，URL 全部来自官方源。可手动添加新版本。",
+  "nssm": {
+    "version": "2.24",
+    "url": "https://nssm.cc/release/nssm-2.24.zip",
+    "exeInZip": "nssm-2.24/win64/nssm.exe"
+  },
   "nginx": [
     {
       "version": "1.27.3",

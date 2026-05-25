@@ -4,9 +4,10 @@
 
 ## 功能
 
-- 一键下载 / 切换版本 (Nginx 1.24~1.27, PHP 7.4~8.3, MySQL 5.7/8.0)
+- 一键下载 / 切换 / **卸载** 版本 (Nginx 1.24~1.27, PHP 7.4~8.3, MySQL 5.7/8.0)
 - 服务启停管理: Nginx、PHP-CGI(FastCGI)、MySQL 三组按钮 + 顶部"全部启动/停止"
-- 实时状态显示: 运行状态、版本号、端口占用
+- **一键开机自启**: NSSM 自动下载, 三大组件注册为 Windows 服务, 面板用任务计划程序登录时启动 (无 UAC)
+- 实时状态显示: 运行状态、版本号、端口、服务注册状态
 - 网站管理: 图形化新建 vhost, 自动写 hosts, 默认欢迎页, 一键浏览/打开目录
 - 数据库工具: 修改 root 密码、打开 MySQL CLI、打开数据目录、一键重新初始化
 - 配置编辑器: 内置 `nginx.conf` / `php.ini` / `my.ini` / vhost 文件编辑
@@ -62,6 +63,31 @@
 首次启动 MySQL 会自动初始化 `data/` 目录, 耗时约 1~2 分钟, 默认 root 密码为空.
 切到"数据库"标签 → "修改 root 密码" 改成你想要的.
 
+### 6. 开机自启动 (推荐)
+
+切到"**自启动**"标签 → 点 **"✓ 一键启用全部开机自启"**, 面板会自动:
+
+1. 从 [nssm.cc](https://nssm.cc) 下载 NSSM (约 200 KB, 一次性)
+2. 把 Nginx / PHP-CGI / MySQL 全部注册为 Windows 服务, 启动类型设为"自动"
+3. 用任务计划程序把面板自身设为登录时启动 (最高权限, 无 UAC 弹窗)
+
+之后开机即可直接访问 [http://localhost](http://localhost), 不再需要手动打开面板.
+
+要禁用就点 **"✗ 一键禁用全部开机自启"**. 也可以在列表中单独切换每一项.
+
+如果不想用 GUI, 命令行等价:
+```cmd
+powershell -ExecutionPolicy Bypass -File scripts\install-service.ps1 -Action enable
+powershell -ExecutionPolicy Bypass -File scripts\install-service.ps1 -Action status
+powershell -ExecutionPolicy Bypass -File scripts\install-service.ps1 -Action disable
+```
+
+### 7. 卸载组件
+
+在首页对应卡片点 **"卸载"** 即可:
+- Nginx / PHP: 删除 `bin/{nginx|php}` 整个目录, 顺带移除已注册的 Windows 服务
+- MySQL: 弹窗询问是否保留 `data/` 目录 (备份到 `tmp/mysql-data-backup-*`)
+
 ## 目录结构
 
 ```
@@ -71,9 +97,10 @@ WinPHP/
 ├── WinPHP.ps1              主 GUI 程序
 ├── src/
 │   ├── Common.ps1          公共: 路径、日志、状态
-│   ├── Downloader.ps1      下载、解压、安装组件
-│   ├── Services.ps1        Nginx / PHP / MySQL 启停
-│   └── Sites.ps1           vhost、hosts 文件管理
+│   ├── Downloader.ps1      下载、解压、安装、卸载组件
+│   ├── Services.ps1        Nginx / PHP / MySQL 启停 (服务感知)
+│   ├── Sites.ps1           vhost、hosts 文件管理
+│   └── AutoStart.ps1       NSSM 自动下载、Windows 服务注册、面板自启动
 ├── config/
 │   ├── sources.json        各版本下载 URL 清单
 │   ├── state.json          (运行后生成) 已安装版本记录
@@ -84,8 +111,9 @@ WinPHP/
 │       ├── php.ini
 │       └── my.ini
 ├── scripts/
-│   └── install-service.ps1 (可选) 注册为 Windows 服务实现开机自启
-├── bin/                    (下载后生成) 三大组件二进制
+│   └── install-service.ps1 CLI 入口 (enable / disable / status)
+├── bin/                    (下载后生成) 二进制
+│   ├── nssm.exe            (首次启用自启时下载)
 │   ├── nginx/
 │   ├── php/
 │   └── mysql/
@@ -94,19 +122,6 @@ WinPHP/
 ├── logs/                   面板自身日志
 └── tmp/                    下载临时目录
 ```
-
-## 开机自启 (可选)
-
-面板默认以前台进程方式管理 Nginx/MySQL, 不会开机自启.
-要让它们作为 Windows 服务运行:
-
-1. 下载 [NSSM](https://nssm.cc/download), 解压把 `nssm.exe` 放到 `bin/` 目录
-2. 以管理员身份运行 PowerShell, 执行:
-   ```powershell
-   cd C:\path\to\WinPHP
-   .\scripts\install-service.ps1 -Action install
-   ```
-3. 卸载: `.\scripts\install-service.ps1 -Action uninstall`
 
 ## 常见问题
 

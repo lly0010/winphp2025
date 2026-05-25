@@ -72,13 +72,28 @@ function Initialize-WPMysqlConfig {
     Write-WPLog 'MySQL 配置已初始化'
 }
 
+# ---- 服务感知辅助 ----
+function Test-WPServiceInstalled {
+    param([string]$Name)
+    return [bool](Get-Service -Name $Name -ErrorAction SilentlyContinue)
+}
+
+function Get-WPServiceStatus {
+    param([string]$Name)
+    $s = Get-Service -Name $Name -ErrorAction SilentlyContinue
+    if (-not $s) { return '' }
+    return "$($s.Status)"
+}
+
 # ---------- Nginx ----------
 function Get-WPNginxStatus {
     $procs = Get-WPProcess -Name 'nginx' -PathFilter $WP_NginxDir
+    $svcRunning = (Get-WPServiceStatus $Global:WP_SvcNginx) -eq 'Running'
     return [pscustomobject]@{
-        Running = ($procs.Count -gt 0)
-        Procs   = $procs
-        Version = Get-NginxRunningVersion
+        Running          = ($procs.Count -gt 0) -or $svcRunning
+        Procs            = $procs
+        Version          = Get-NginxRunningVersion
+        ServiceInstalled = (Test-WPServiceInstalled $Global:WP_SvcNginx)
     }
 }
 
@@ -86,8 +101,7 @@ function Start-WPNginx {
     $exe = Join-Path $WP_NginxDir 'nginx.exe'
     if (-not (Test-Path $exe)) { Write-WPLog 'Nginx 未安装' 'WARN'; return $false }
 
-    $status = Get-WPNginxStatus
-    if ($status.Running) { Write-WPLog 'Nginx 已在运行' 'WARN'; return $true }
+    if ((Get-WPNginxStatus).Running) { Write-WPLog 'Nginx 已在运行' 'WARN'; return $true }
 
     # 配置语法检查
     $test = & $exe -t -p $WP_NginxDir 2>&1
@@ -95,14 +109,25 @@ function Start-WPNginx {
         Write-WPLog "Nginx 配置检查失败: $test" 'ERROR'
         return $false
     }
-    Start-Process -FilePath $exe -ArgumentList "-p `"$WP_NginxDir`"" -WorkingDirectory $WP_NginxDir -WindowStyle Hidden | Out-Null
-    Start-Sleep -Milliseconds 600
+
+    if (Test-WPServiceInstalled $Global:WP_SvcNginx) {
+        try { Start-Service -Name $Global:WP_SvcNginx -ErrorAction Stop } catch {
+            Write-WPLog "服务启动失败: $_" 'ERROR'; return $false
+        }
+    } else {
+        Start-Process -FilePath $exe -ArgumentList "-p `"$WP_NginxDir`"" `
+            -WorkingDirectory $WP_NginxDir -WindowStyle Hidden | Out-Null
+    }
+    Start-Sleep -Milliseconds 800
     $ok = (Get-WPNginxStatus).Running
     Write-WPLog ("Nginx 启动 " + $(if ($ok) {'成功'} else {'失败'}))
     return $ok
 }
 
 function Stop-WPNginx {
+    if (Test-WPServiceInstalled $Global:WP_SvcNginx) {
+        try { Stop-Service -Name $Global:WP_SvcNginx -Force -ErrorAction Stop } catch {}
+    }
     $exe = Join-Path $WP_NginxDir 'nginx.exe'
     if (Test-Path $exe) {
         & $exe -s stop -p $WP_NginxDir 2>&1 | Out-Null
@@ -134,10 +159,12 @@ function Invoke-WPNginxReload {
 # ---------- PHP-CGI ----------
 function Get-WPPhpStatus {
     $procs = Get-WPProcess -Name 'php-cgi' -PathFilter $WP_PhpDir
+    $svcRunning = (Get-WPServiceStatus $Global:WP_SvcPhp) -eq 'Running'
     return [pscustomobject]@{
-        Running = ($procs.Count -gt 0)
-        Procs   = $procs
-        Version = Get-PHPInstalledVersion
+        Running          = ($procs.Count -gt 0) -or $svcRunning
+        Procs            = $procs
+        Version          = Get-PHPInstalledVersion
+        ServiceInstalled = (Test-WPServiceInstalled $Global:WP_SvcPhp)
     }
 }
 
@@ -145,27 +172,34 @@ function Start-WPPhp {
     $exe = Join-Path $WP_PhpDir 'php-cgi.exe'
     if (-not (Test-Path $exe)) { Write-WPLog 'PHP 未安装' 'WARN'; return $false }
 
-    $status = Get-WPPhpStatus
-    if ($status.Running) { Write-WPLog 'PHP-CGI 已在运行' 'WARN'; return $true }
+    if ((Get-WPPhpStatus).Running) { Write-WPLog 'PHP-CGI 已在运行' 'WARN'; return $true }
 
     if (Test-WPPort 9000) {
         Write-WPLog '端口 9000 被占用，启动失败' 'ERROR'; return $false
     }
 
-    $ini = Join-Path $WP_PhpDir 'php.ini'
-    # 启动多个 PHP-CGI 子进程，使用 PHP_FCGI_CHILDREN/MAX_REQUESTS
-    $env:PHP_FCGI_MAX_REQUESTS = '1000'
-    $env:PHP_FCGI_CHILDREN     = '5'
-    Start-Process -FilePath $exe `
-        -ArgumentList "-b","127.0.0.1:9000","-c","`"$ini`"" `
-        -WorkingDirectory $WP_PhpDir -WindowStyle Hidden | Out-Null
-    Start-Sleep -Milliseconds 600
+    if (Test-WPServiceInstalled $Global:WP_SvcPhp) {
+        try { Start-Service -Name $Global:WP_SvcPhp -ErrorAction Stop } catch {
+            Write-WPLog "PHP 服务启动失败: $_" 'ERROR'; return $false
+        }
+    } else {
+        $ini = Join-Path $WP_PhpDir 'php.ini'
+        $env:PHP_FCGI_MAX_REQUESTS = '1000'
+        $env:PHP_FCGI_CHILDREN     = '5'
+        Start-Process -FilePath $exe `
+            -ArgumentList "-b","127.0.0.1:9000","-c","`"$ini`"" `
+            -WorkingDirectory $WP_PhpDir -WindowStyle Hidden | Out-Null
+    }
+    Start-Sleep -Milliseconds 800
     $ok = (Get-WPPhpStatus).Running
     Write-WPLog ("PHP-CGI 启动 " + $(if ($ok) {'成功'} else {'失败'}))
     return $ok
 }
 
 function Stop-WPPhp {
+    if (Test-WPServiceInstalled $Global:WP_SvcPhp) {
+        try { Stop-Service -Name $Global:WP_SvcPhp -Force -ErrorAction Stop } catch {}
+    }
     Get-WPProcess -Name 'php-cgi' -PathFilter $WP_PhpDir | ForEach-Object {
         try { Stop-Process -Id $_.Id -Force } catch {}
     }
@@ -182,10 +216,12 @@ function Restart-WPPhp {
 # ---------- MySQL ----------
 function Get-WPMysqlStatus {
     $procs = Get-WPProcess -Name 'mysqld' -PathFilter $WP_MysqlDir
+    $svcRunning = (Get-WPServiceStatus $Global:WP_SvcMysql) -eq 'Running'
     return [pscustomobject]@{
-        Running = ($procs.Count -gt 0)
-        Procs   = $procs
-        Version = Get-MySQLInstalledVersion
+        Running          = ($procs.Count -gt 0) -or $svcRunning
+        Procs            = $procs
+        Version          = Get-MySQLInstalledVersion
+        ServiceInstalled = (Test-WPServiceInstalled $Global:WP_SvcMysql)
     }
 }
 
@@ -230,9 +266,15 @@ function Start-WPMysql {
         Write-WPLog '端口 3306 被占用，启动失败' 'ERROR'; return $false
     }
 
-    $ini = Join-Path $WP_MysqlDir 'my.ini'
-    Start-Process -FilePath $exe -ArgumentList "--defaults-file=`"$ini`"" `
-        -WorkingDirectory $WP_MysqlDir -WindowStyle Hidden | Out-Null
+    if (Test-WPServiceInstalled $Global:WP_SvcMysql) {
+        try { Start-Service -Name $Global:WP_SvcMysql -ErrorAction Stop } catch {
+            Write-WPLog "MySQL 服务启动失败: $_" 'ERROR'; return $false
+        }
+    } else {
+        $ini = Join-Path $WP_MysqlDir 'my.ini'
+        Start-Process -FilePath $exe -ArgumentList "--defaults-file=`"$ini`"" `
+            -WorkingDirectory $WP_MysqlDir -WindowStyle Hidden | Out-Null
+    }
     Start-Sleep -Seconds 2
     $ok = (Get-WPMysqlStatus).Running
     Write-WPLog ("MySQL 启动 " + $(if ($ok) {'成功'} else {'失败'}))
@@ -240,13 +282,12 @@ function Start-WPMysql {
 }
 
 function Stop-WPMysql {
+    if (Test-WPServiceInstalled $Global:WP_SvcMysql) {
+        try { Stop-Service -Name $Global:WP_SvcMysql -Force -ErrorAction Stop } catch {}
+    }
     $admin = Join-Path $WP_MysqlDir 'bin\mysqladmin.exe'
     if (Test-Path $admin) {
-        $state = Get-WPState
-        # 尝试优雅关停
-        try {
-            & $admin -u root --protocol=tcp -h 127.0.0.1 shutdown 2>&1 | Out-Null
-        } catch {}
+        try { & $admin -u root --protocol=tcp -h 127.0.0.1 shutdown 2>&1 | Out-Null } catch {}
     }
     Start-Sleep -Milliseconds 800
     Get-WPProcess -Name 'mysqld' -PathFilter $WP_MysqlDir | ForEach-Object {

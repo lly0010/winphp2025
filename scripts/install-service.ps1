@@ -1,74 +1,65 @@
-# install-service.ps1 - 可选: 将 Nginx / MySQL 注册为 Windows 服务,实现开机自启动
-# 必须以管理员身份运行. 用法: powershell -ExecutionPolicy Bypass -File install-service.ps1 [-Action install|uninstall]
+# install-service.ps1 - CLI 入口: 一键启用/禁用全部开机自启
+# 与面板"自启动"标签页的"一键启用全部"等价, 适合无界面环境或批处理使用.
+# 用法:
+#   powershell -ExecutionPolicy Bypass -File install-service.ps1 -Action enable
+#   powershell -ExecutionPolicy Bypass -File install-service.ps1 -Action disable
+#   powershell -ExecutionPolicy Bypass -File install-service.ps1 -Action status
 
 param(
-    [ValidateSet('install', 'uninstall', 'status')]
-    [string]$Action = 'install'
+    [ValidateSet('enable', 'disable', 'status')]
+    [string]$Action = 'status'
 )
 
 $ErrorActionPreference = 'Stop'
 $root = (Get-Item $PSScriptRoot).Parent.FullName
-. (Join-Path $root 'src\Common.ps1')
+$srcDir = Join-Path $root 'src'
+. (Join-Path $srcDir 'Common.ps1')
+. (Join-Path $srcDir 'Downloader.ps1')
+. (Join-Path $srcDir 'Services.ps1')
+. (Join-Path $srcDir 'Sites.ps1')
+. (Join-Path $srcDir 'AutoStart.ps1')
 
-$svcNginx = 'WinPHPNginx'
-$svcMysql = 'WinPHPMySQL'
+Initialize-WPDirs
 
 function Test-Admin {
     ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
-
-if (-not (Test-Admin)) { Write-Host '请以管理员身份运行' -ForegroundColor Red; exit 1 }
+if (-not (Test-Admin)) {
+    Write-Host '请以管理员身份运行' -ForegroundColor Red; exit 1
+}
 
 switch ($Action) {
-    'install' {
-        # Nginx 需要 srvany 或 nssm 才能正确作为服务运行, 这里使用内置 sc + 第三方包装方法
-        Write-Host "提示: Windows 服务化建议使用 NSSM (https://nssm.cc/)" -ForegroundColor Yellow
-        Write-Host "请下载 nssm.exe 放到面板的 bin/ 目录后再执行" -ForegroundColor Yellow
-        $nssm = Join-Path $WP_BinDir 'nssm.exe'
-        if (-not (Test-Path $nssm)) {
-            Write-Host "未找到 $nssm,跳过" -ForegroundColor Red
-            exit 1
+    'enable' {
+        Write-Host '正在启用全部开机自启 (首次自动下载 NSSM)...' -ForegroundColor Cyan
+        $r = Enable-WPAllAutoStart
+        Write-Host ''
+        Write-Host "面板自启: $(if ($r.Panel) {'✓'} else {'✗'})"
+        foreach ($t in 'Nginx','Php','Mysql') {
+            if ($r[$t] -eq $null) { Write-Host "$t : (组件未安装, 跳过)" -ForegroundColor Yellow }
+            elseif ($r[$t])       { Write-Host "$t : ✓ 已注册" -ForegroundColor Green }
+            else                  { Write-Host "$t : ✗ 失败" -ForegroundColor Red }
         }
-
-        # MySQL
-        $mysqld = Join-Path $WP_MysqlDir 'bin\mysqld.exe'
-        $myini  = Join-Path $WP_MysqlDir 'my.ini'
-        if (Test-Path $mysqld) {
-            & $nssm install $svcMysql $mysqld "--defaults-file=$myini"
-            & $nssm set $svcMysql Start SERVICE_AUTO_START
-            Write-Host "已安装服务: $svcMysql" -ForegroundColor Green
-        }
-
-        # Nginx
-        $nginx = Join-Path $WP_NginxDir 'nginx.exe'
-        if (Test-Path $nginx) {
-            & $nssm install $svcNginx $nginx "-p" "$WP_NginxDir"
-            & $nssm set $svcNginx Start SERVICE_AUTO_START
-            & $nssm set $svcNginx AppDirectory $WP_NginxDir
-            Write-Host "已安装服务: $svcNginx" -ForegroundColor Green
-        }
-
-        Write-Host '完成. 可通过 services.msc 管理.'
     }
-    'uninstall' {
-        $nssm = Join-Path $WP_BinDir 'nssm.exe'
-        if (Test-Path $nssm) {
-            & $nssm stop    $svcNginx 2>$null
-            & $nssm remove  $svcNginx confirm 2>$null
-            & $nssm stop    $svcMysql 2>$null
-            & $nssm remove  $svcMysql confirm 2>$null
-        } else {
-            sc.exe stop $svcNginx 2>$null
-            sc.exe delete $svcNginx 2>$null
-            sc.exe stop $svcMysql 2>$null
-            sc.exe delete $svcMysql 2>$null
-        }
-        Write-Host '已卸载服务' -ForegroundColor Green
+    'disable' {
+        Write-Host '正在禁用全部开机自启...' -ForegroundColor Cyan
+        Disable-WPAllAutoStart | Out-Null
+        Write-Host '✓ 已禁用' -ForegroundColor Green
     }
     'status' {
-        foreach ($n in @($svcNginx, $svcMysql)) {
-            $s = Get-Service -Name $n -ErrorAction SilentlyContinue
-            if ($s) { Write-Host "$n : $($s.Status)" } else { Write-Host "$n : 未安装" }
+        Write-Host "面板自启 (任务 $WP_TaskName): " -NoNewline
+        if (Get-WPPanelAutoStartStatus) {
+            Write-Host '✓ 启用' -ForegroundColor Green
+        } else {
+            Write-Host '✗ 未启用' -ForegroundColor Yellow
+        }
+        foreach ($n in @($WP_SvcNginx, $WP_SvcPhp, $WP_SvcMysql)) {
+            $info = Get-WPServiceInfo $n
+            Write-Host "$n : " -NoNewline
+            if ($info.Installed) {
+                Write-Host "$($info.Status) ($($info.StartType))" -ForegroundColor Green
+            } else {
+                Write-Host '未注册' -ForegroundColor Yellow
+            }
         }
     }
 }
