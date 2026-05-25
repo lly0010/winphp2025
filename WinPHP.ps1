@@ -22,7 +22,7 @@ Add-Type -AssemblyName System.Drawing
 # ============ 主窗口 ============
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'WinPHP 2025 - PHP/MySQL/Nginx 一键部署面板'
-$form.Size = New-Object System.Drawing.Size(1240, 720)
+$form.Size = New-Object System.Drawing.Size(1240, 780)
 $form.StartPosition = 'CenterScreen'
 $form.MinimumSize = $form.Size
 $form.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
@@ -94,17 +94,35 @@ $tabs.TabPages.Add($tabHome)
 function New-ServiceBox {
     param([string]$Name, [int]$X)
     $g = New-Object System.Windows.Forms.GroupBox
-    $g.Text = " $Name "
+    $g.Text = ''  # 不依赖 GroupBox 自身标题, 用独立 Label 保证可见
     $g.Location = New-Object System.Drawing.Point($X, 12)
-    $g.Size = New-Object System.Drawing.Size(290, 295)
-    $g.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 10, [System.Drawing.FontStyle]::Bold)
+    $g.Size = New-Object System.Drawing.Size(290, 320)
+    $g.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
+
+    # 显式标题 Label - 不依赖 GroupBox 内置标题
+    $titleLbl = New-Object System.Windows.Forms.Label
+    $titleLbl.Name = 'lblTitle'
+    $titleLbl.Text = $Name
+    $titleLbl.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 13, [System.Drawing.FontStyle]::Bold)
+    $titleLbl.ForeColor = [System.Drawing.Color]::FromArgb(45, 116, 184)
+    $titleLbl.Location = New-Object System.Drawing.Point(15, 10)
+    $titleLbl.AutoSize = $true
+    $g.Controls.Add($titleLbl)
+
+    # 分隔线
+    $sep = New-Object System.Windows.Forms.Label
+    $sep.Text = ''
+    $sep.Size = New-Object System.Drawing.Size(260, 1)
+    $sep.Location = New-Object System.Drawing.Point(15, 40)
+    $sep.BackColor = [System.Drawing.Color]::FromArgb(220, 220, 220)
+    $g.Controls.Add($sep)
 
     $statusLbl = New-Object System.Windows.Forms.Label
     $statusLbl.Name = 'lblStatus'
     $statusLbl.Text = '● 未运行'
     $statusLbl.ForeColor = [System.Drawing.Color]::Gray
     $statusLbl.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 12, [System.Drawing.FontStyle]::Bold)
-    $statusLbl.Location = New-Object System.Drawing.Point(20, 30)
+    $statusLbl.Location = New-Object System.Drawing.Point(20, 55)
     $statusLbl.AutoSize = $true
     $g.Controls.Add($statusLbl)
 
@@ -113,7 +131,7 @@ function New-ServiceBox {
     $verLbl.Text = '版本: 未安装'
     $verLbl.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
     $verLbl.ForeColor = [System.Drawing.Color]::DimGray
-    $verLbl.Location = New-Object System.Drawing.Point(20, 65)
+    $verLbl.Location = New-Object System.Drawing.Point(20, 90)
     $verLbl.AutoSize = $true
     $g.Controls.Add($verLbl)
 
@@ -122,7 +140,7 @@ function New-ServiceBox {
     $portLbl.Text = ''
     $portLbl.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
     $portLbl.ForeColor = [System.Drawing.Color]::DimGray
-    $portLbl.Location = New-Object System.Drawing.Point(20, 88)
+    $portLbl.Location = New-Object System.Drawing.Point(20, 113)
     $portLbl.AutoSize = $true
     $g.Controls.Add($portLbl)
 
@@ -131,7 +149,7 @@ function New-ServiceBox {
     $svcLbl.Text = '服务: 未注册'
     $svcLbl.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
     $svcLbl.ForeColor = [System.Drawing.Color]::DimGray
-    $svcLbl.Location = New-Object System.Drawing.Point(20, 111)
+    $svcLbl.Location = New-Object System.Drawing.Point(20, 136)
     $svcLbl.AutoSize = $true
     $g.Controls.Add($svcLbl)
 
@@ -139,35 +157,35 @@ function New-ServiceBox {
     $btnStart.Name = 'btnStart'
     $btnStart.Text = '启动'
     $btnStart.Size = New-Object System.Drawing.Size(80, 32)
-    $btnStart.Location = New-Object System.Drawing.Point(20, 145)
+    $btnStart.Location = New-Object System.Drawing.Point(20, 170)
     $g.Controls.Add($btnStart)
 
     $btnStop = New-Object System.Windows.Forms.Button
     $btnStop.Name = 'btnStop'
     $btnStop.Text = '停止'
     $btnStop.Size = New-Object System.Drawing.Size(80, 32)
-    $btnStop.Location = New-Object System.Drawing.Point(105, 145)
+    $btnStop.Location = New-Object System.Drawing.Point(105, 170)
     $g.Controls.Add($btnStop)
 
     $btnRestart = New-Object System.Windows.Forms.Button
     $btnRestart.Name = 'btnRestart'
     $btnRestart.Text = '重启'
     $btnRestart.Size = New-Object System.Drawing.Size(80, 32)
-    $btnRestart.Location = New-Object System.Drawing.Point(190, 145)
+    $btnRestart.Location = New-Object System.Drawing.Point(190, 170)
     $g.Controls.Add($btnRestart)
 
     $btnInstall = New-Object System.Windows.Forms.Button
     $btnInstall.Name = 'btnInstall'
     $btnInstall.Text = '安装 / 切换版本'
     $btnInstall.Size = New-Object System.Drawing.Size(125, 30)
-    $btnInstall.Location = New-Object System.Drawing.Point(20, 188)
+    $btnInstall.Location = New-Object System.Drawing.Point(20, 213)
     $g.Controls.Add($btnInstall)
 
     $btnUninstall = New-Object System.Windows.Forms.Button
     $btnUninstall.Name = 'btnUninstall'
     $btnUninstall.Text = '卸载'
     $btnUninstall.Size = New-Object System.Drawing.Size(60, 30)
-    $btnUninstall.Location = New-Object System.Drawing.Point(150, 188)
+    $btnUninstall.Location = New-Object System.Drawing.Point(150, 213)
     $btnUninstall.ForeColor = [System.Drawing.Color]::FromArgb(180, 50, 50)
     $g.Controls.Add($btnUninstall)
 
@@ -175,14 +193,14 @@ function New-ServiceBox {
     $btnConfig.Name = 'btnConfig'
     $btnConfig.Text = '配置'
     $btnConfig.Size = New-Object System.Drawing.Size(55, 30)
-    $btnConfig.Location = New-Object System.Drawing.Point(215, 188)
+    $btnConfig.Location = New-Object System.Drawing.Point(215, 213)
     $g.Controls.Add($btnConfig)
 
     $btnAuto = New-Object System.Windows.Forms.Button
     $btnAuto.Name = 'btnAuto'
     $btnAuto.Text = '注册为开机自启服务'
     $btnAuto.Size = New-Object System.Drawing.Size(250, 32)
-    $btnAuto.Location = New-Object System.Drawing.Point(20, 232)
+    $btnAuto.Location = New-Object System.Drawing.Point(20, 257)
     $g.Controls.Add($btnAuto)
 
     return $g
@@ -199,8 +217,8 @@ $tabHome.Controls.AddRange(@($boxNginx, $boxPhp, $boxMysql, $boxPg))
 # 快速操作面板
 $quick = New-Object System.Windows.Forms.GroupBox
 $quick.Text = ' 快速操作 '
-$quick.Location = New-Object System.Drawing.Point(12, 320)
-$quick.Size = New-Object System.Drawing.Size(580, 285)
+$quick.Location = New-Object System.Drawing.Point(12, 345)
+$quick.Size = New-Object System.Drawing.Size(580, 295)
 $quick.Anchor = 'Top,Left,Bottom'
 $quick.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 10, [System.Drawing.FontStyle]::Bold)
 
@@ -256,8 +274,8 @@ $tabHome.Controls.Add($quick)
 # 我的网站面板
 $sites = New-Object System.Windows.Forms.GroupBox
 $sites.Text = ' 我的网站 '
-$sites.Location = New-Object System.Drawing.Point(604, 320)
-$sites.Size = New-Object System.Drawing.Size(606, 285)
+$sites.Location = New-Object System.Drawing.Point(604, 345)
+$sites.Size = New-Object System.Drawing.Size(606, 295)
 $sites.Anchor = 'Top,Left,Right,Bottom'
 $sites.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 10, [System.Drawing.FontStyle]::Bold)
 
@@ -300,18 +318,29 @@ $tabHome.Controls.Add($sites)
 
 # 主页站点列表刷新
 function Refresh-WPHomeSites {
-    $lvHomeSites.Items.Clear()
-    foreach ($s in Get-WPSites) {
-        $it = New-Object System.Windows.Forms.ListViewItem $s.name
-        $it.SubItems.Add([string]$s.serverName) | Out-Null
-        $it.SubItems.Add([string]$s.port) | Out-Null
-        $it.SubItems.Add([string]$s.root) | Out-Null
-        $lvHomeSites.Items.Add($it) | Out-Null
-    }
-    if ($lvHomeSites.Items.Count -eq 0) {
-        $it = New-Object System.Windows.Forms.ListViewItem '(暂无站点, 点左侧 "+ 新建 PHP 网站")'
-        $it.ForeColor = [System.Drawing.Color]::Gray
-        $lvHomeSites.Items.Add($it) | Out-Null
+    $lvHomeSites.BeginUpdate()
+    try {
+        $lvHomeSites.Items.Clear()
+        $list = @(Get-WPSites)
+        foreach ($s in $list) {
+            # 用显式 Text/SubItems 赋值, 避免位置参数构造器在某些场景不绑定 Text 属性
+            $it = New-Object System.Windows.Forms.ListViewItem
+            $it.Text = "$($s.name)"
+            $it.ForeColor = [System.Drawing.Color]::Black
+            $it.UseItemStyleForSubItems = $true
+            [void]$it.SubItems.Add("$($s.serverName)")
+            [void]$it.SubItems.Add("$($s.port)")
+            [void]$it.SubItems.Add("$($s.root)")
+            [void]$lvHomeSites.Items.Add($it)
+        }
+        if ($list.Count -eq 0) {
+            $it = New-Object System.Windows.Forms.ListViewItem
+            $it.Text = '(暂无站点, 点左侧 "+ 新建 PHP 网站")'
+            $it.ForeColor = [System.Drawing.Color]::Gray
+            [void]$lvHomeSites.Items.Add($it)
+        }
+    } finally {
+        $lvHomeSites.EndUpdate()
     }
 }
 
@@ -699,14 +728,21 @@ $tabSites.Controls.Add($lvSites)
 $tabSites.Controls.Add($sitesPanel)
 
 function Refresh-WPSitesList {
-    $lvSites.Items.Clear()
-    foreach ($s in Get-WPSites) {
-        $it = New-Object System.Windows.Forms.ListViewItem $s.name
-        $it.SubItems.Add([string]$s.serverName) | Out-Null
-        $it.SubItems.Add([string]$s.port) | Out-Null
-        $it.SubItems.Add([string]$s.root) | Out-Null
-        $it.SubItems.Add([string]$s.createdAt) | Out-Null
-        $lvSites.Items.Add($it) | Out-Null
+    $lvSites.BeginUpdate()
+    try {
+        $lvSites.Items.Clear()
+        foreach ($s in @(Get-WPSites)) {
+            $it = New-Object System.Windows.Forms.ListViewItem
+            $it.Text = "$($s.name)"
+            $it.UseItemStyleForSubItems = $true
+            [void]$it.SubItems.Add("$($s.serverName)")
+            [void]$it.SubItems.Add("$($s.port)")
+            [void]$it.SubItems.Add("$($s.root)")
+            [void]$it.SubItems.Add("$($s.createdAt)")
+            [void]$lvSites.Items.Add($it)
+        }
+    } finally {
+        $lvSites.EndUpdate()
     }
     if (Get-Command Refresh-WPHomeSites -ErrorAction SilentlyContinue) { Refresh-WPHomeSites }
 }

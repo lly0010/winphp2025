@@ -58,10 +58,31 @@
 点"创建", Nginx 自动重载, hosts 自动添加 `127.0.0.1 myblog.local`.
 浏览器访问 [http://myblog.local](http://myblog.local) 即可.
 
-### 5. MySQL 第一次启动
+### 5. 数据库默认账号 (重要)
 
-首次启动 MySQL 会自动初始化 `data/` 目录, 耗时约 1~2 分钟, 默认 root 密码为空.
-切到"数据库"标签 → "修改 root 密码" 改成你想要的.
+| 数据库     | 端口 | 默认用户  | 默认密码          | 说明                                       |
+|------------|------|-----------|-------------------|--------------------------------------------|
+| MySQL      | 3306 | `root`    | (空)              | 首次启动 `--initialize-insecure` 创建      |
+| PostgreSQL | 5432 | `postgres`| (空, trust 认证)  | 首次启动 `initdb --auth=trust` 创建        |
+
+首次启动 MySQL 会自动初始化 `data/` 目录, 耗时约 1~2 分钟.
+**生产环境一定要修改密码**:
+
+- MySQL: 切到"数据库"标签 → "修改 root 密码"
+- PostgreSQL: 启动后命令行执行
+  ```sql
+  ALTER USER postgres WITH PASSWORD '你的强密码';
+  ```
+  然后编辑 `bin/postgresql/data/pg_hba.conf` 把 `trust` 改成 `scram-sha-256` 并重启服务
+
+应用程序里连接数据库的 PHP 示例 (默认密码为空):
+```php
+// MySQL (PDO)
+$pdo = new PDO('mysql:host=127.0.0.1;dbname=test;charset=utf8mb4', 'root', '');
+
+// PostgreSQL (PDO)
+$pdo = new PDO('pgsql:host=127.0.0.1;port=5432;dbname=postgres', 'postgres', '');
+```
 
 ### 6. 开机自启动 (推荐)
 

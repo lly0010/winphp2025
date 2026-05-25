@@ -357,8 +357,12 @@ function Set-WPMysqlRootPassword {
 function Get-WPPostgresStatus {
     $procs = Get-WPProcess -Name 'postgres' -PathFilter $WP_PgDir
     $svcRunning = (Get-WPServiceStatus $Global:WP_SvcPg) -eq 'Running'
+    # pg_ctl 启动 postgres 时会用受限令牌, 管理员 PS 也可能读不到 MainModule.
+    # 兜底: 我们已经装了 PG 且 5432 在监听 → 视为运行中
+    $hasOurPg = Test-Path (Join-Path $WP_PgDir 'bin\postgres.exe')
+    $portUp = $hasOurPg -and (Test-WPPort 5432)
     return [pscustomobject]@{
-        Running          = ($procs.Count -gt 0) -or $svcRunning
+        Running          = ($procs.Count -gt 0) -or $svcRunning -or $portUp
         Procs            = $procs
         Version          = Get-PostgresInstalledVersion
         ServiceInstalled = (Test-WPServiceInstalled $Global:WP_SvcPg)
