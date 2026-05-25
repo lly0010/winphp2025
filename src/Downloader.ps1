@@ -104,8 +104,34 @@ function Install-WPComponent {
     $entry = $sources.$Type | Where-Object { $_.version -eq $Version } | Select-Object -First 1
     if (-not $entry) { throw "未找到 $Type $Version 的下载源" }
 
+    # 支持 urls 数组 (新), 也兼容 url 单字段 (旧)
+    $urls = @()
+    if ($entry.PSObject.Properties.Name -contains 'urls' -and $entry.urls) {
+        $urls = @($entry.urls)
+    }
+    if (($urls.Count -eq 0) -and ($entry.PSObject.Properties.Name -contains 'url') -and $entry.url) {
+        $urls = @($entry.url)
+    }
+    if ($urls.Count -eq 0) { throw "$Type $Version 没有任何下载 URL" }
+
     $tmpZip = Join-Path $WP_TmpDir ("$Type-$Version.zip")
-    Invoke-WPDownload -Url $entry.url -OutFile $tmpZip -ProgressCallback $ProgressCallback
+    $downloaded = $false
+    $lastErr = $null
+    for ($i = 0; $i -lt $urls.Count; $i++) {
+        $u = $urls[$i]
+        Write-WPLog ("尝试下载源 {0}/{1}: {2}" -f ($i+1), $urls.Count, $u)
+        try {
+            Invoke-WPDownload -Url $u -OutFile $tmpZip -ProgressCallback $ProgressCallback -MaxRetry 2
+            $downloaded = $true
+            break
+        } catch {
+            $lastErr = $_
+            Write-WPLog "下载源失败, 切换下一个: $_" 'WARN'
+        }
+    }
+    if (-not $downloaded) {
+        throw "$Type $Version 全部 $($urls.Count) 个下载源都失败. 最后错误: $lastErr"
+    }
 
     $dest = switch ($Type) {
         'nginx' { $WP_NginxDir }
