@@ -1,4 +1,4 @@
-# Common.ps1 - 公共函数: 路径、配置、日志
+﻿# Common.ps1 - 公共函数: 路径、配置、日志
 # 由 WinPHP.ps1 在启动时 dot-source 加载
 
 # ---- 全局路径 ----

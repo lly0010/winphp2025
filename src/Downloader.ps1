@@ -1,4 +1,4 @@
-# Downloader.ps1 - 下载与解压组件
+﻿# Downloader.ps1 - 下载与解压组件
 
 function Invoke-WPDownload {
     param(

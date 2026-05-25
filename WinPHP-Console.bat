@@ -1,5 +1,6 @@
 @echo off
-REM WinPHP - 调试模式 (保留控制台,可看到错误)
+chcp 65001 >nul 2>&1
+REM WinPHP - Debug mode (keep console open to see errors)
 setlocal
 set "ROOT=%~dp0"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%WinPHP.ps1"

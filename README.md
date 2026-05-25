@@ -125,6 +125,9 @@ WinPHP/
 
 ## 常见问题
 
+**Q: 启动报中文乱码 / "意外的标记" / "并未报告所有分析错误"?**
+A: PowerShell 5.1 默认按系统 ANSI (中文系统 = GBK) 解析 `.ps1`. 本仓库所有 `.ps1` 已写入 UTF-8 BOM, 解决该问题. 如果你修改过脚本并丢了 BOM, 用记事本"另存为 → UTF-8 (带 BOM)"重新保存即可. `.gitattributes` 把 `.ps1` 标记为 binary 防止 git 在 Windows 检出时改写编码.
+
 **Q: 提示"无法加载脚本"或执行策略错误?**
 A: 使用 `WinPHP.bat` 启动 (内置 `-ExecutionPolicy Bypass`). 如果直接执行 `.ps1`, 先运行
 `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.

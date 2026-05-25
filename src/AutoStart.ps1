@@ -1,4 +1,4 @@
-# AutoStart.ps1 - NSSM 集成、Windows 服务安装/卸载、面板自启动
+﻿# AutoStart.ps1 - NSSM 集成、Windows 服务安装/卸载、面板自启动
 # 设计目标: 用户在"自启动"标签页点"启用全部", 一切搞定
 
 # ---- 服务名约定 ----

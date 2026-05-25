@@ -1,4 +1,4 @@
-# WinPHP.ps1 - WinForms 主 GUI
+﻿# WinPHP.ps1 - WinForms 主 GUI
 # 类似 phpStudy 的 Windows PHP/MySQL/Nginx 一键部署面板
 
 $ErrorActionPreference = 'Stop'

@@ -1,4 +1,4 @@
-# Sites.ps1 - 网站 / vhost / hosts 文件管理
+﻿# Sites.ps1 - 网站 / vhost / hosts 文件管理
 
 function Add-WPSite {
     param(

@@ -1,4 +1,4 @@
-# Services.ps1 - Nginx / PHP-CGI / MySQL 服务控制
+﻿# Services.ps1 - Nginx / PHP-CGI / MySQL 服务控制
 # 全部以前台进程方式启动并隐藏窗口，由面板管理 PID
 
 # ---------- 配置初始化 ----------

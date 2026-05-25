@@ -1,4 +1,4 @@
-# install-service.ps1 - CLI 入口: 一键启用/禁用全部开机自启
+﻿# install-service.ps1 - CLI 入口: 一键启用/禁用全部开机自启
 # 与面板"自启动"标签页的"一键启用全部"等价, 适合无界面环境或批处理使用.
 # 用法:
 #   powershell -ExecutionPolicy Bypass -File install-service.ps1 -Action enable
