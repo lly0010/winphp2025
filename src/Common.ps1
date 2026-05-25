@@ -42,7 +42,7 @@ function Write-WPLog {
 # ---- 配置: 已安装组件状态 ----
 function Get-WPState {
     if (Test-Path $WP_StateFile) {
-        try { return Get-Content $WP_StateFile -Raw | ConvertFrom-Json } catch {}
+        try { return Get-Content $WP_StateFile -Raw -Encoding UTF8 | ConvertFrom-Json } catch {}
     }
     return [pscustomobject]@{
         nginxVersion = ''
@@ -61,7 +61,7 @@ function Save-WPState {
 # ---- 配置: 网站列表 ----
 function Get-WPSites {
     if (Test-Path $WP_SitesFile) {
-        try { return @(Get-Content $WP_SitesFile -Raw | ConvertFrom-Json) } catch {}
+        try { return @(Get-Content $WP_SitesFile -Raw -Encoding UTF8 | ConvertFrom-Json) } catch {}
     }
     return @()
 }
@@ -74,7 +74,7 @@ function Save-WPSites {
 # ---- 下载源清单 ----
 function Get-WPSources {
     $f = Join-Path $WP_ConfigDir 'sources.json'
-    return Get-Content $f -Raw | ConvertFrom-Json
+    return Get-Content $f -Raw -Encoding UTF8 | ConvertFrom-Json
 }
 
 # ---- 进程辅助 ----
@@ -101,7 +101,7 @@ function Expand-WPTemplate {
         [string]$TemplatePath,
         [hashtable]$Tokens
     )
-    $text = Get-Content $TemplatePath -Raw
+    $text = Get-Content $TemplatePath -Raw -Encoding UTF8
     foreach ($k in $Tokens.Keys) {
         $text = $text.Replace("##$k##", $Tokens[$k])
     }

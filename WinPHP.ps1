@@ -337,7 +337,7 @@ function Show-ConfigEditor {
     $tb.WordWrap = $false
     $tb.Font = New-Object System.Drawing.Font('Consolas', 10)
     $tb.Dock = 'Fill'
-    $tb.Text = (Get-Content $FilePath -Raw)
+    $tb.Text = (Get-Content $FilePath -Raw -Encoding UTF8)
     $dlg.Controls.Add($tb)
 
     $pnl = New-Object System.Windows.Forms.Panel
