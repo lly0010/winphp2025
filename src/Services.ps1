@@ -72,6 +72,17 @@ function Initialize-WPMysqlConfig {
     Write-WPLog 'MySQL 配置已初始化'
 }
 
+function Initialize-WPPostgresConfig {
+    # PostgreSQL 的主配置由 initdb 生成在 data 目录里. 这里仅在 initdb 之后
+    # 用我们的模板内容追加/覆盖 data/postgresql.conf 末尾, 不重写 initdb 已生成的核心部分.
+    if (-not (Test-Path $WP_PgDir)) { return }
+    foreach ($d in @('logs')) {
+        $p = Join-Path $WP_PgDir $d
+        if (-not (Test-Path $p)) { New-Item -ItemType Directory $p -Force | Out-Null }
+    }
+    Write-WPLog 'PostgreSQL 目录已就绪'
+}
+
 # ---- 服务感知辅助 ----
 function Test-WPServiceInstalled {
     param([string]$Name)
@@ -340,4 +351,110 @@ function Set-WPMysqlRootPassword {
     }
     Write-WPLog 'MySQL 密码修改失败（如已设置过密码请手动操作）' 'ERROR'
     return $false
+}
+
+# ---------- PostgreSQL ----------
+function Get-WPPostgresStatus {
+    $procs = Get-WPProcess -Name 'postgres' -PathFilter $WP_PgDir
+    $svcRunning = (Get-WPServiceStatus $Global:WP_SvcPg) -eq 'Running'
+    return [pscustomobject]@{
+        Running          = ($procs.Count -gt 0) -or $svcRunning
+        Procs            = $procs
+        Version          = Get-PostgresInstalledVersion
+        ServiceInstalled = (Test-WPServiceInstalled $Global:WP_SvcPg)
+    }
+}
+
+function Initialize-WPPostgresData {
+    # 首次启动前用 initdb 初始化 data 目录
+    $initdb = Join-Path $WP_PgDir 'bin\initdb.exe'
+    $dataDir = Join-Path $WP_PgDir 'data'
+
+    if (Test-Path (Join-Path $dataDir 'PG_VERSION')) {
+        Write-WPLog 'PostgreSQL data 目录已存在,跳过初始化'
+        return $true
+    }
+    if (Test-Path $dataDir) { Remove-Item $dataDir -Recurse -Force }
+    if (-not (Test-Path $initdb)) { Write-WPLog 'initdb.exe 不存在,无法初始化' 'ERROR'; return $false }
+
+    Write-WPLog 'PostgreSQL 正在初始化 data 目录...'
+    # 用 trust 认证, 编码 UTF8, superuser=postgres
+    $pgArgs = @('-D', "$dataDir", '-E', 'UTF8', '--locale=C', '-U', 'postgres', '--auth=trust')
+    $p = Start-Process -FilePath $initdb -ArgumentList $pgArgs -Wait -PassThru -WindowStyle Hidden
+    if ($p.ExitCode -ne 0) {
+        Write-WPLog "PostgreSQL initdb 失败,退出码 $($p.ExitCode)" 'ERROR'
+        return $false
+    }
+
+    # 覆盖 pg_hba.conf 和追加 postgresql.conf
+    $hbaTpl = Join-Path $WP_TplDir 'pg_hba.conf'
+    if (Test-Path $hbaTpl) {
+        Copy-Item $hbaTpl (Join-Path $dataDir 'pg_hba.conf') -Force
+    }
+    $cfgTpl = Join-Path $WP_TplDir 'postgresql.conf'
+    if (Test-Path $cfgTpl) {
+        $append = "`n# ===== Appended by WinPHP =====`n" + (Get-Content $cfgTpl -Raw -Encoding UTF8)
+        Add-Content -Path (Join-Path $dataDir 'postgresql.conf') -Value $append -Encoding UTF8
+    }
+
+    Write-WPLog 'PostgreSQL 初始化完成, superuser=postgres, 本地无密码 (trust)'
+    return $true
+}
+
+function Start-WPPostgres {
+    $pgCtl = Join-Path $WP_PgDir 'bin\pg_ctl.exe'
+    if (-not (Test-Path $pgCtl)) { Write-WPLog 'PostgreSQL 未安装' 'WARN'; return $false }
+
+    if ((Get-WPPostgresStatus).Running) { Write-WPLog 'PostgreSQL 已在运行' 'WARN'; return $true }
+
+    $dataDir = Join-Path $WP_PgDir 'data'
+    if (-not (Test-Path (Join-Path $dataDir 'PG_VERSION'))) {
+        if (-not (Initialize-WPPostgresData)) { return $false }
+    }
+
+    if (Test-WPPort 5432) {
+        Write-WPLog '端口 5432 被占用，启动失败' 'ERROR'; return $false
+    }
+
+    if (Test-WPServiceInstalled $Global:WP_SvcPg) {
+        try { Start-Service -Name $Global:WP_SvcPg -ErrorAction Stop } catch {
+            Write-WPLog "PostgreSQL 服务启动失败: $_" 'ERROR'; return $false
+        }
+    } else {
+        $logFile = Join-Path $WP_PgDir 'logs\postgres-start.log'
+        Start-Process -FilePath $pgCtl `
+            -ArgumentList @('start','-D',"$dataDir",'-l',"$logFile",'-w','-t','30') `
+            -WorkingDirectory $WP_PgDir -WindowStyle Hidden -Wait | Out-Null
+    }
+    Start-Sleep -Milliseconds 800
+    $ok = (Get-WPPostgresStatus).Running
+    Write-WPLog ("PostgreSQL 启动 " + $(if ($ok) {'成功'} else {'失败'}))
+    return $ok
+}
+
+function Stop-WPPostgres {
+    if (Test-WPServiceInstalled $Global:WP_SvcPg) {
+        try { Stop-Service -Name $Global:WP_SvcPg -Force -ErrorAction SilentlyContinue } catch {}
+    }
+    $pgCtl = Join-Path $WP_PgDir 'bin\pg_ctl.exe'
+    $dataDir = Join-Path $WP_PgDir 'data'
+    if ((Test-Path $pgCtl) -and (Test-Path $dataDir)) {
+        try {
+            Start-Process -FilePath $pgCtl `
+                -ArgumentList @('stop','-D',"$dataDir",'-m','fast','-w','-t','30') `
+                -WorkingDirectory $WP_PgDir -WindowStyle Hidden -Wait | Out-Null
+        } catch {}
+    }
+    Start-Sleep -Milliseconds 600
+    Get-WPProcess -Name 'postgres' -PathFilter $WP_PgDir | ForEach-Object {
+        try { Stop-Process -Id $_.Id -Force } catch {}
+    }
+    Write-WPLog 'PostgreSQL 已停止'
+    return $true
+}
+
+function Restart-WPPostgres {
+    Stop-WPPostgres | Out-Null
+    Start-Sleep -Milliseconds 500
+    return Start-WPPostgres
 }

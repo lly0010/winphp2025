@@ -95,7 +95,7 @@ function Expand-WPZip {
 
 function Install-WPComponent {
     param(
-        [ValidateSet('nginx','php','mysql')]
+        [ValidateSet('nginx','php','mysql','postgresql')]
         [string]$Type,
         [string]$Version,
         [scriptblock]$ProgressCallback = $null
@@ -134,16 +134,18 @@ function Install-WPComponent {
     }
 
     $dest = switch ($Type) {
-        'nginx' { $WP_NginxDir }
-        'php'   { $WP_PhpDir }
-        'mysql' { $WP_MysqlDir }
+        'nginx'      { $WP_NginxDir }
+        'php'        { $WP_PhpDir }
+        'mysql'      { $WP_MysqlDir }
+        'postgresql' { $WP_PgDir }
     }
 
     # 安装前先停止对应服务
     switch ($Type) {
-        'nginx' { Stop-WPNginx | Out-Null }
-        'php'   { Stop-WPPhp   | Out-Null }
-        'mysql' { Stop-WPMysql | Out-Null }
+        'nginx'      { Stop-WPNginx    | Out-Null }
+        'php'        { Stop-WPPhp      | Out-Null }
+        'mysql'      { Stop-WPMysql    | Out-Null }
+        'postgresql' { Stop-WPPostgres | Out-Null }
     }
 
     Expand-WPZip -ZipPath $tmpZip -Destination $dest -RootInZip $entry.rootInZip
@@ -151,16 +153,23 @@ function Install-WPComponent {
 
     # 安装后立即生成对应组件的配置
     switch ($Type) {
-        'nginx' { Initialize-WPNginxConfig }
-        'php'   { Initialize-WPPhpConfig }
-        'mysql' { Initialize-WPMysqlConfig }
+        'nginx'      { Initialize-WPNginxConfig }
+        'php'        { Initialize-WPPhpConfig }
+        'mysql'      { Initialize-WPMysqlConfig }
+        'postgresql' { Initialize-WPPostgresConfig }
     }
 
     $state = Get-WPState
     switch ($Type) {
-        'nginx' { $state.nginxVersion = $Version }
-        'php'   { $state.phpVersion   = $Version }
-        'mysql' { $state.mysqlVersion = $Version; $state.mysqlInited = $false }
+        'nginx'      { $state.nginxVersion = $Version }
+        'php'        { $state.phpVersion   = $Version }
+        'mysql'      { $state.mysqlVersion = $Version; $state.mysqlInited = $false }
+        'postgresql' {
+            if ($state.PSObject.Properties.Name -notcontains 'pgVersion') {
+                $state | Add-Member -MemberType NoteProperty -Name pgVersion -Value '' -Force
+            }
+            $state.pgVersion = $Version
+        }
     }
     Save-WPState $state
     Write-WPLog "$Type $Version 安装完成"
@@ -168,16 +177,17 @@ function Install-WPComponent {
 
 function Uninstall-WPComponent {
     param(
-        [ValidateSet('nginx','php','mysql')]
+        [ValidateSet('nginx','php','mysql','postgresql')]
         [string]$Type,
-        [bool]$KeepData = $false      # 仅对 mysql 有意义: 保留 data 目录到 tmp/mysql-data-backup
+        [bool]$KeepData = $false      # 对 mysql / postgresql 有意义: 保留 data 目录到 tmp/<type>-data-backup
     )
 
     # 先把对应的 Windows 服务卸掉 (若已注册)
     $svcName = switch ($Type) {
-        'nginx' { $WP_SvcNginx }
-        'php'   { $WP_SvcPhp }
-        'mysql' { $WP_SvcMysql }
+        'nginx'      { $WP_SvcNginx }
+        'php'        { $WP_SvcPhp }
+        'mysql'      { $WP_SvcMysql }
+        'postgresql' { $WP_SvcPg }
     }
     if ($svcName -and (Get-Command Uninstall-WPService -ErrorAction SilentlyContinue)) {
         Uninstall-WPService -Name $svcName | Out-Null
@@ -185,25 +195,27 @@ function Uninstall-WPComponent {
 
     # 停止直接进程
     switch ($Type) {
-        'nginx' { Stop-WPNginx | Out-Null }
-        'php'   { Stop-WPPhp   | Out-Null }
-        'mysql' { Stop-WPMysql | Out-Null }
+        'nginx'      { Stop-WPNginx    | Out-Null }
+        'php'        { Stop-WPPhp      | Out-Null }
+        'mysql'      { Stop-WPMysql    | Out-Null }
+        'postgresql' { Stop-WPPostgres | Out-Null }
     }
     Start-Sleep -Milliseconds 800
 
     $dir = switch ($Type) {
-        'nginx' { $WP_NginxDir }
-        'php'   { $WP_PhpDir }
-        'mysql' { $WP_MysqlDir }
+        'nginx'      { $WP_NginxDir }
+        'php'        { $WP_PhpDir }
+        'mysql'      { $WP_MysqlDir }
+        'postgresql' { $WP_PgDir }
     }
 
-    # MySQL 数据可选备份
-    if ($Type -eq 'mysql' -and $KeepData) {
+    # 数据库可选备份
+    if ((($Type -eq 'mysql') -or ($Type -eq 'postgresql')) -and $KeepData) {
         $dataDir = Join-Path $dir 'data'
         if (Test-Path $dataDir) {
-            $backup = Join-Path $WP_TmpDir ("mysql-data-backup-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+            $backup = Join-Path $WP_TmpDir ("$Type-data-backup-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
             Move-Item $dataDir $backup -Force
-            Write-WPLog "MySQL data 目录已备份: $backup"
+            Write-WPLog "$Type data 目录已备份: $backup"
         }
     }
 
@@ -225,9 +237,12 @@ function Uninstall-WPComponent {
 
     $state = Get-WPState
     switch ($Type) {
-        'nginx' { $state.nginxVersion = '' }
-        'php'   { $state.phpVersion   = '' }
-        'mysql' { $state.mysqlVersion = ''; $state.mysqlInited = $false }
+        'nginx'      { $state.nginxVersion = '' }
+        'php'        { $state.phpVersion   = '' }
+        'mysql'      { $state.mysqlVersion = ''; $state.mysqlInited = $false }
+        'postgresql' {
+            if ($state.PSObject.Properties.Name -contains 'pgVersion') { $state.pgVersion = '' }
+        }
     }
     Save-WPState $state
     Write-WPLog "$Type 已卸载"

@@ -7,6 +7,7 @@ $Global:WP_BinDir    = Join-Path $WP_Root 'bin'
 $Global:WP_NginxDir  = Join-Path $WP_BinDir 'nginx'
 $Global:WP_PhpDir    = Join-Path $WP_BinDir 'php'
 $Global:WP_MysqlDir  = Join-Path $WP_BinDir 'mysql'
+$Global:WP_PgDir     = Join-Path $WP_BinDir 'postgresql'
 $Global:WP_WwwDir    = Join-Path $WP_Root 'www'
 $Global:WP_LogsDir   = Join-Path $WP_Root 'logs'
 $Global:WP_TmpDir    = Join-Path $WP_Root 'tmp'
@@ -25,6 +26,10 @@ function Initialize-WPDirs {
         if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
     }
 }
+
+# 兼容 PowerShell 5.x 没有 PlaceholderText 属性的情况 (TextBox.PlaceholderText 是 .NET 4.8+)
+# 这里只是占位, 主要靠 .NET Framework 4.8 自身支持. 5.1 通常已经是 4.8.
+
 
 # ---- 日志 ----
 function Write-WPLog {
@@ -135,6 +140,16 @@ function Get-MySQLInstalledVersion {
     try {
         $v = & $exe --version 2>&1
         if ($v -match 'Ver ([\d\.]+)') { return $Matches[1] }
+    } catch {}
+    return ''
+}
+
+function Get-PostgresInstalledVersion {
+    $exe = Join-Path $WP_PgDir 'bin\postgres.exe'
+    if (-not (Test-Path $exe)) { return '' }
+    try {
+        $v = & $exe --version 2>&1
+        if ($v -match '([\d\.]+)') { return $Matches[1] }
     } catch {}
     return ''
 }

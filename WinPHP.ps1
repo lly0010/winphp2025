@@ -22,7 +22,7 @@ Add-Type -AssemblyName System.Drawing
 # ============ 主窗口 ============
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'WinPHP 2025 - PHP/MySQL/Nginx 一键部署面板'
-$form.Size = New-Object System.Drawing.Size(960, 680)
+$form.Size = New-Object System.Drawing.Size(1240, 720)
 $form.StartPosition = 'CenterScreen'
 $form.MinimumSize = $form.Size
 $form.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
@@ -63,8 +63,8 @@ function New-HeaderButton {
     $b.Anchor = 'Top,Right'
     return $b
 }
-$btnStartAll = New-HeaderButton -Text '全部启动' -X 720
-$btnStopAll  = New-HeaderButton -Text '全部停止' -X 825
+$btnStartAll = New-HeaderButton -Text '全部启动' -X 1000
+$btnStopAll  = New-HeaderButton -Text '全部停止' -X 1105
 $header.Controls.AddRange(@($btnStartAll, $btnStopAll))
 
 # ---- 底部状态栏 ----
@@ -188,50 +188,158 @@ function New-ServiceBox {
     return $g
 }
 
-$boxNginx = New-ServiceBox -Name 'Nginx' -X 12
-$boxPhp   = New-ServiceBox -Name 'PHP-CGI' -X 314
-$boxMysql = New-ServiceBox -Name 'MySQL' -X 616
-$tabHome.Controls.AddRange(@($boxNginx, $boxPhp, $boxMysql))
+$boxNginx = New-ServiceBox -Name 'Nginx'      -X 12
+$boxPhp   = New-ServiceBox -Name 'PHP-CGI'    -X 314
+$boxMysql = New-ServiceBox -Name 'MySQL'      -X 616
+$boxPg    = New-ServiceBox -Name 'PostgreSQL' -X 918
+$tabHome.Controls.AddRange(@($boxNginx, $boxPhp, $boxMysql, $boxPg))
 
-# 提示卡片
-$tip = New-Object System.Windows.Forms.GroupBox
-$tip.Text = ' 提示 '
-$tip.Location = New-Object System.Drawing.Point(12, 320)
-$tip.Size = New-Object System.Drawing.Size(894, 275)
-$tip.Anchor = 'Top,Left,Right,Bottom'
-$tip.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 10, [System.Drawing.FontStyle]::Bold)
+# ---- 主页下半 (类似 FlyEnv): 左 快速操作, 右 我的网站 ----
 
-$tipText = New-Object System.Windows.Forms.RichTextBox
-$tipText.Dock = 'Fill'
-$tipText.ReadOnly = $true
-$tipText.BorderStyle = 'None'
-$tipText.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
-$tipText.Text = @'
-欢迎使用 WinPHP 2025!
+# 快速操作面板
+$quick = New-Object System.Windows.Forms.GroupBox
+$quick.Text = ' 快速操作 '
+$quick.Location = New-Object System.Drawing.Point(12, 320)
+$quick.Size = New-Object System.Drawing.Size(580, 285)
+$quick.Anchor = 'Top,Left,Bottom'
+$quick.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 10, [System.Drawing.FontStyle]::Bold)
 
-入门四步:
-  1. 在 Nginx / PHP / MySQL 三个卡片点"安装 / 切换版本"下载组件 (首次需联网)
-  2. 点击对应"启动"按钮, 或顶部"全部启动"
-  3. 浏览器访问 http://localhost 验证默认欢迎页
-  4. 在"网站"标签页添加自己的域名和目录
+$btnQuickAddSite = New-Object System.Windows.Forms.Button
+$btnQuickAddSite.Text = '+ 新建 PHP 网站'
+$btnQuickAddSite.Size = New-Object System.Drawing.Size(265, 70)
+$btnQuickAddSite.Location = New-Object System.Drawing.Point(20, 35)
+$btnQuickAddSite.BackColor = [System.Drawing.Color]::FromArgb(45, 116, 184)
+$btnQuickAddSite.ForeColor = [System.Drawing.Color]::White
+$btnQuickAddSite.FlatStyle = 'Flat'
+$btnQuickAddSite.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 13, [System.Drawing.FontStyle]::Bold)
+$quick.Controls.Add($btnQuickAddSite)
 
-卡片按钮说明:
-  • 启动 / 停止 / 重启 — 控制对应服务
-  • 安装 / 切换版本 — 下载并替换 (会先停止该服务)
-  • 卸载 — 移除该组件,同时卸载注册的 Windows 服务 (MySQL 会询问是否保留 data)
-  • 配置 — 直接编辑配置文件
-  • 注册为开机自启服务 — 调用 NSSM 注册为 Windows 服务
+$btnQuickWp = New-Object System.Windows.Forms.Button
+$btnQuickWp.Text = "WordPress 站点`n（自动创建 wp_xxx 数据库）"
+$btnQuickWp.Size = New-Object System.Drawing.Size(265, 70)
+$btnQuickWp.Location = New-Object System.Drawing.Point(295, 35)
+$btnQuickWp.FlatStyle = 'Flat'
+$btnQuickWp.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 10)
+$quick.Controls.Add($btnQuickWp)
 
-一键自启:
-  • 切到"自启动"标签页, 点"一键启用全部" — NSSM 自动下载, 三大组件全部注册为服务, 面板也加入登录自启动
+function New-QuickBtn {
+    param([string]$Text, [int]$X, [int]$Y, [scriptblock]$OnClick)
+    $b = New-Object System.Windows.Forms.Button
+    $b.Text = $Text
+    $b.Size = New-Object System.Drawing.Size(170, 36)
+    $b.Location = New-Object System.Drawing.Point($X, $Y)
+    $b.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
+    $b.Add_Click($OnClick)
+    return $b
+}
 
-提示:
-  • 必须以管理员身份运行 (WinPHP.bat 自动请求)
-  • 默认 MySQL root 密码为空, 请在"数据库"标签页修改
-  • 全部数据位于面板根目录, 可整体迁移到 U 盘
-'@
-$tip.Controls.Add($tipText)
-$tabHome.Controls.Add($tip)
+$quick.Controls.AddRange(@(
+    (New-QuickBtn '浏览 localhost'   20  125 { Start-Process 'http://localhost' }),
+    (New-QuickBtn 'phpinfo'          200 125 { Start-Process 'http://localhost/phpinfo.php' }),
+    (New-QuickBtn '打开 www 目录'    380 125 { Start-Process explorer.exe $WP_WwwDir }),
+    (New-QuickBtn '编辑 hosts'       20  170 { Start-Process notepad.exe $WP_HostsFile }),
+    (New-QuickBtn '面板根目录'        200 170 { Start-Process explorer.exe $WP_Root }),
+    (New-QuickBtn '日志目录'          380 170 { Start-Process explorer.exe $WP_LogsDir }),
+    (New-QuickBtn 'MySQL CLI'        20  215 {
+        $mysqlExe = Join-Path $WP_MysqlDir 'bin\mysql.exe'
+        if (Test-Path $mysqlExe) { Start-Process cmd.exe -ArgumentList "/k","`"$mysqlExe`" -u root -p -h 127.0.0.1" }
+    }),
+    (New-QuickBtn 'PostgreSQL CLI'   200 215 {
+        $psql = Join-Path $WP_PgDir 'bin\psql.exe'
+        if (Test-Path $psql) { Start-Process cmd.exe -ArgumentList "/k","`"$psql`" -h 127.0.0.1 -U postgres" }
+    }),
+    (New-QuickBtn 'Nginx 重载'       380 215 { Invoke-WPNginxReload | Out-Null })
+))
+
+$tabHome.Controls.Add($quick)
+
+# 我的网站面板
+$sites = New-Object System.Windows.Forms.GroupBox
+$sites.Text = ' 我的网站 '
+$sites.Location = New-Object System.Drawing.Point(604, 320)
+$sites.Size = New-Object System.Drawing.Size(606, 285)
+$sites.Anchor = 'Top,Left,Right,Bottom'
+$sites.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 10, [System.Drawing.FontStyle]::Bold)
+
+$lvHomeSites = New-Object System.Windows.Forms.ListView
+$lvHomeSites.View = 'Details'
+$lvHomeSites.FullRowSelect = $true
+$lvHomeSites.GridLines = $true
+$lvHomeSites.Location = New-Object System.Drawing.Point(12, 30)
+$lvHomeSites.Size = New-Object System.Drawing.Size(580, 200)
+$lvHomeSites.Anchor = 'Top,Left,Right,Bottom'
+$lvHomeSites.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
+$lvHomeSites.Columns.Add('名称', 120) | Out-Null
+$lvHomeSites.Columns.Add('域名', 200) | Out-Null
+$lvHomeSites.Columns.Add('端口', 60)  | Out-Null
+$lvHomeSites.Columns.Add('根目录', 190) | Out-Null
+$sites.Controls.Add($lvHomeSites)
+
+$btnHomeOpen = New-Object System.Windows.Forms.Button
+$btnHomeOpen.Text = '浏览'
+$btnHomeOpen.Size = New-Object System.Drawing.Size(90, 32)
+$btnHomeOpen.Location = New-Object System.Drawing.Point(12, 240)
+$btnHomeOpen.Anchor = 'Bottom,Left'
+$sites.Controls.Add($btnHomeOpen)
+
+$btnHomeDir = New-Object System.Windows.Forms.Button
+$btnHomeDir.Text = '打开目录'
+$btnHomeDir.Size = New-Object System.Drawing.Size(90, 32)
+$btnHomeDir.Location = New-Object System.Drawing.Point(108, 240)
+$btnHomeDir.Anchor = 'Bottom,Left'
+$sites.Controls.Add($btnHomeDir)
+
+$btnHomeManage = New-Object System.Windows.Forms.Button
+$btnHomeManage.Text = '管理全部 →'
+$btnHomeManage.Size = New-Object System.Drawing.Size(110, 32)
+$btnHomeManage.Location = New-Object System.Drawing.Point(490, 240)
+$btnHomeManage.Anchor = 'Bottom,Right'
+$sites.Controls.Add($btnHomeManage)
+
+$tabHome.Controls.Add($sites)
+
+# 主页站点列表刷新
+function Refresh-WPHomeSites {
+    $lvHomeSites.Items.Clear()
+    foreach ($s in Get-WPSites) {
+        $it = New-Object System.Windows.Forms.ListViewItem $s.name
+        $it.SubItems.Add([string]$s.serverName) | Out-Null
+        $it.SubItems.Add([string]$s.port) | Out-Null
+        $it.SubItems.Add([string]$s.root) | Out-Null
+        $lvHomeSites.Items.Add($it) | Out-Null
+    }
+    if ($lvHomeSites.Items.Count -eq 0) {
+        $it = New-Object System.Windows.Forms.ListViewItem '(暂无站点, 点左侧 "+ 新建 PHP 网站")'
+        $it.ForeColor = [System.Drawing.Color]::Gray
+        $lvHomeSites.Items.Add($it) | Out-Null
+    }
+}
+
+$btnHomeOpen.Add_Click({
+    if ($lvHomeSites.SelectedItems.Count -eq 0) { return }
+    $name = $lvHomeSites.SelectedItems[0].Text
+    $s = Get-WPSites | Where-Object { $_.name -eq $name } | Select-Object -First 1
+    if ($s) {
+        $url = "http://$($s.serverName)" + $(if ($s.port -ne 80) { ":$($s.port)" } else { '' })
+        Start-Process $url
+    }
+})
+$btnHomeDir.Add_Click({
+    if ($lvHomeSites.SelectedItems.Count -eq 0) { return }
+    $name = $lvHomeSites.SelectedItems[0].Text
+    $s = Get-WPSites | Where-Object { $_.name -eq $name } | Select-Object -First 1
+    if ($s -and (Test-Path $s.root)) { Start-Process explorer.exe $s.root }
+})
+$btnHomeManage.Add_Click({ $tabs.SelectedIndex = 1 })
+
+$btnQuickAddSite.Add_Click({ Show-AddSiteDialog -PresetTemplate 'php' })
+$btnQuickWp.Add_Click({
+    if (-not (Test-Path (Join-Path $WP_MysqlDir 'bin\mysql.exe'))) {
+        [System.Windows.Forms.MessageBox]::Show('WordPress 需要 MySQL. 请先安装并启动 MySQL.','提示','OK','Warning')|Out-Null
+        return
+    }
+    Show-AddSiteDialog -PresetTemplate 'wordpress'
+})
 
 # ============================================================
 # 通用: 组件安装对话框
@@ -373,9 +481,10 @@ function Show-ConfigEditor {
 # ============================================================
 function Refresh-WPHomeStatus {
     $items = @(
-        @{ Box = $boxNginx; Status = Get-WPNginxStatus; Port = 80;   Type = 'nginx' },
-        @{ Box = $boxPhp;   Status = Get-WPPhpStatus;   Port = 9000; Type = 'php'   },
-        @{ Box = $boxMysql; Status = Get-WPMysqlStatus; Port = 3306; Type = 'mysql' }
+        @{ Box = $boxNginx; Status = Get-WPNginxStatus;    Port = 80;   Type = 'nginx' },
+        @{ Box = $boxPhp;   Status = Get-WPPhpStatus;      Port = 9000; Type = 'php'   },
+        @{ Box = $boxMysql; Status = Get-WPMysqlStatus;    Port = 3306; Type = 'mysql' },
+        @{ Box = $boxPg;    Status = Get-WPPostgresStatus; Port = 5432; Type = 'postgresql' }
     )
     foreach ($it in $items) {
         $lblS = $it.Box.Controls['lblStatus']
@@ -502,21 +611,35 @@ $boxMysql.Controls['btnAuto'].Add_Click({
     Invoke-WPToggleAutoStart -Type 'mysql' -ServiceName $Global:WP_SvcMysql -Installer { Install-WPServiceMysql | Out-Null }
 })
 
+$boxPg.Controls['btnStart'].Add_Click({   Invoke-WPSafe '正在启动 PostgreSQL...'  { Start-WPPostgres   | Out-Null } })
+$boxPg.Controls['btnStop'].Add_Click({    Invoke-WPSafe '正在停止 PostgreSQL...'  { Stop-WPPostgres    | Out-Null } })
+$boxPg.Controls['btnRestart'].Add_Click({ Invoke-WPSafe '正在重启 PostgreSQL...'  { Restart-WPPostgres | Out-Null } })
+$boxPg.Controls['btnInstall'].Add_Click({ Show-InstallDialog -Type 'postgresql' })
+$boxPg.Controls['btnUninstall'].Add_Click({ Invoke-WPUninstallComponent -Type 'postgresql' -DisplayName 'PostgreSQL' })
+$boxPg.Controls['btnConfig'].Add_Click({
+    $cfg = Join-Path $WP_PgDir 'data\postgresql.conf'
+    if (Test-Path $cfg) { Show-ConfigEditor -FilePath $cfg -Title 'postgresql.conf' }
+    else { [System.Windows.Forms.MessageBox]::Show('PostgreSQL 尚未初始化, 请先启动一次',  '提示','OK','Warning')|Out-Null }
+})
+$boxPg.Controls['btnAuto'].Add_Click({
+    Invoke-WPToggleAutoStart -Type 'postgresql' -ServiceName $Global:WP_SvcPg -Installer { Install-WPServicePostgres | Out-Null }
+})
+
 $btnStartAll.Add_Click({
-    Set-WPStatus '正在启动全部服务...'
-    Start-WPNginx | Out-Null
-    Start-WPPhp   | Out-Null
-    Start-WPMysql | Out-Null
-    Refresh-WPHomeStatus
-    Set-WPStatus '就绪'
+    Invoke-WPSafe '正在启动全部服务...' {
+        Start-WPNginx    | Out-Null
+        Start-WPPhp      | Out-Null
+        Start-WPMysql    | Out-Null
+        Start-WPPostgres | Out-Null
+    }
 })
 $btnStopAll.Add_Click({
-    Set-WPStatus '正在停止全部服务...'
-    Stop-WPNginx | Out-Null
-    Stop-WPPhp   | Out-Null
-    Stop-WPMysql | Out-Null
-    Refresh-WPHomeStatus
-    Set-WPStatus '就绪'
+    Invoke-WPSafe '正在停止全部服务...' {
+        Stop-WPNginx    | Out-Null
+        Stop-WPPhp      | Out-Null
+        Stop-WPMysql    | Out-Null
+        Stop-WPPostgres | Out-Null
+    }
 })
 
 # ============================================================
@@ -585,12 +708,54 @@ function Refresh-WPSitesList {
         $it.SubItems.Add([string]$s.createdAt) | Out-Null
         $lvSites.Items.Add($it) | Out-Null
     }
+    if (Get-Command Refresh-WPHomeSites -ErrorAction SilentlyContinue) { Refresh-WPHomeSites }
+}
+
+# ---- 网站模板内容生成 ----
+function Get-WPSiteTemplateContent {
+    param([string]$Template, [string]$ServerName)
+    switch ($Template) {
+        'static' {
+            return @{
+                File = 'index.html'
+                Body = "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>$ServerName</title></head><body><h1>$ServerName</h1><p>纯静态站点 (由 WinPHP 创建)</p></body></html>"
+                SubRoot = ''
+            }
+        }
+        'laravel' {
+            return @{
+                File = 'public/index.php'
+                Body = "<?php`n// Laravel 入口占位. 请把 Laravel 项目内容覆盖到本目录的上一层 (站点 root 已指向 public/).`necho 'Laravel public 目录占位. 请 composer create-project laravel/laravel ..';"
+                SubRoot = 'public'
+            }
+        }
+        'wordpress' {
+            return @{
+                File = 'README.txt'
+                Body = "请将 WordPress 解压到本目录, 然后访问站点完成安装.`n下载: https://cn.wordpress.org/latest-zh_CN.zip`n数据库已为你预创建 (见站点信息)."
+                SubRoot = ''
+            }
+        }
+        default {
+            return @{
+                File = 'index.php'
+                Body = "<?php`necho '<h1>$ServerName</h1>';`necho '<p>PHP ' . phpversion() . ' - powered by WinPHP</p>';`necho '<p>Document Root: ' . `$_SERVER['DOCUMENT_ROOT'] . '</p>';"
+                SubRoot = ''
+            }
+        }
+    }
 }
 
 function Show-AddSiteDialog {
+    param(
+        [string]$PresetTemplate = 'php',
+        [string]$PresetName = '',
+        [string]$PresetServer = ''
+    )
+
     $dlg = New-Object System.Windows.Forms.Form
-    $dlg.Text = '新建站点'
-    $dlg.Size = New-Object System.Drawing.Size(500, 320)
+    $dlg.Text = '新建 PHP 网站'
+    $dlg.Size = New-Object System.Drawing.Size(560, 460)
     $dlg.StartPosition = 'CenterParent'
     $dlg.FormBorderStyle = 'FixedDialog'
     $dlg.MaximizeBox = $false
@@ -600,34 +765,42 @@ function Show-AddSiteDialog {
         $l.Text = $t; $l.Location = New-Object System.Drawing.Point(20, $y); $l.AutoSize = $true
         return $l
     }
-    function New-DlgInput($y, $w = 350) {
+    function New-DlgInput($y, $w = 380) {
         $t = New-Object System.Windows.Forms.TextBox
-        $t.Location = New-Object System.Drawing.Point(110, $y)
+        $t.Location = New-Object System.Drawing.Point(120, $y)
         $t.Size = New-Object System.Drawing.Size($w, 25)
         return $t
     }
 
-    $dlg.Controls.Add((New-DlgLabel '站点名称:' 22))
-    $tbName = New-DlgInput 20
+    $dlg.Controls.Add((New-DlgLabel '站点名称:' 25))
+    $tbName = New-DlgInput 22
+    $tbName.Text = $PresetName
     $dlg.Controls.Add($tbName)
+    $lblHintName = New-Object System.Windows.Forms.Label
+    $lblHintName.Text = '(用作 vhost 文件名和默认目录名)'
+    $lblHintName.Location = New-Object System.Drawing.Point(120, 47)
+    $lblHintName.AutoSize = $true
+    $lblHintName.ForeColor = [System.Drawing.Color]::DimGray
+    $lblHintName.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 8)
+    $dlg.Controls.Add($lblHintName)
 
-    $dlg.Controls.Add((New-DlgLabel '域名:' 62))
-    $tbServer = New-DlgInput 60
-    $tbServer.Text = 'test.local'
+    $dlg.Controls.Add((New-DlgLabel '域名:' 75))
+    $tbServer = New-DlgInput 72
+    $tbServer.Text = if ($PresetServer) { $PresetServer } else { 'test.local' }
     $dlg.Controls.Add($tbServer)
 
-    $dlg.Controls.Add((New-DlgLabel '端口:' 102))
-    $tbPort = New-DlgInput 100 80
+    $dlg.Controls.Add((New-DlgLabel '端口:' 105))
+    $tbPort = New-DlgInput 102 80
     $tbPort.Text = '80'
     $dlg.Controls.Add($tbPort)
 
-    $dlg.Controls.Add((New-DlgLabel '根目录:' 142))
-    $tbRoot = New-DlgInput 140 270
+    $dlg.Controls.Add((New-DlgLabel '根目录:' 135))
+    $tbRoot = New-DlgInput 132 300
     $dlg.Controls.Add($tbRoot)
     $btnBrowse = New-Object System.Windows.Forms.Button
     $btnBrowse.Text = '...'
     $btnBrowse.Size = New-Object System.Drawing.Size(70, 26)
-    $btnBrowse.Location = New-Object System.Drawing.Point(390, 140)
+    $btnBrowse.Location = New-Object System.Drawing.Point(430, 131)
     $dlg.Controls.Add($btnBrowse)
     $btnBrowse.Add_Click({
         $fbd = New-Object System.Windows.Forms.FolderBrowserDialog
@@ -635,44 +808,161 @@ function Show-AddSiteDialog {
         if ($fbd.ShowDialog() -eq 'OK') { $tbRoot.Text = $fbd.SelectedPath }
     })
 
+    # 网站类型 / 模板 (FlyEnv 风格)
+    $dlg.Controls.Add((New-DlgLabel '网站类型:' 168))
+    $cbTpl = New-Object System.Windows.Forms.ComboBox
+    $cbTpl.DropDownStyle = 'DropDownList'
+    $cbTpl.Location = New-Object System.Drawing.Point(120, 165)
+    $cbTpl.Size = New-Object System.Drawing.Size(380, 25)
+    [void]$cbTpl.Items.Add('普通 PHP 项目 (index.php)')
+    [void]$cbTpl.Items.Add('Laravel / ThinkPHP / Symfony (root 指向 public/)')
+    [void]$cbTpl.Items.Add('WordPress (空目录, 自行解压)')
+    [void]$cbTpl.Items.Add('纯静态 HTML (index.html)')
+    $tplMap = @{ 'php'=0; 'laravel'=1; 'wordpress'=2; 'static'=3 }
+    $cbTpl.SelectedIndex = $tplMap[$PresetTemplate]
+    $dlg.Controls.Add($cbTpl)
+
+    # 当前 PHP 版本展示 (只读)
+    $dlg.Controls.Add((New-DlgLabel 'PHP 版本:' 200))
+    $lblPhpVer = New-Object System.Windows.Forms.Label
+    $phpV = Get-PHPInstalledVersion
+    $lblPhpVer.Text = if ($phpV) { "$phpV (单 PHP 实例, 监听 127.0.0.1:9000)" } else { '未安装 - 请先到首页安装 PHP' }
+    $lblPhpVer.ForeColor = if ($phpV) { [System.Drawing.Color]::FromArgb(60, 130, 60) } else { [System.Drawing.Color]::Red }
+    $lblPhpVer.Location = New-Object System.Drawing.Point(120, 200)
+    $lblPhpVer.AutoSize = $true
+    $dlg.Controls.Add($lblPhpVer)
+
+    # 数据库选项
+    $dlg.Controls.Add((New-DlgLabel '数据库:' 232))
+    $cbCreateDb = New-Object System.Windows.Forms.CheckBox
+    $cbCreateDb.Text = '同时创建 MySQL 数据库 (与站点同名)'
+    $cbCreateDb.Checked = $false
+    $cbCreateDb.Location = New-Object System.Drawing.Point(120, 230)
+    $cbCreateDb.AutoSize = $true
+    $dlg.Controls.Add($cbCreateDb)
+    if ($PresetTemplate -eq 'wordpress') { $cbCreateDb.Checked = $true }
+
+    $tbDbPwd = New-Object System.Windows.Forms.TextBox
+    $tbDbPwd.Location = New-Object System.Drawing.Point(120, 257)
+    $tbDbPwd.Size = New-Object System.Drawing.Size(180, 25)
+    $tbDbPwd.UseSystemPasswordChar = $true
+    $dlg.Controls.Add($tbDbPwd)
+    $lblDbHint = New-Object System.Windows.Forms.Label
+    $lblDbHint.Text = '↑ MySQL root 密码 (留空表示空密码)'
+    $lblDbHint.Location = New-Object System.Drawing.Point(305, 261)
+    $lblDbHint.AutoSize = $true
+    $lblDbHint.ForeColor = [System.Drawing.Color]::DimGray
+    $lblDbHint.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 8)
+    $dlg.Controls.Add($lblDbHint)
+
+    # hosts
     $cbHosts = New-Object System.Windows.Forms.CheckBox
-    $cbHosts.Text = '自动写入 hosts (需管理员)'
+    $cbHosts.Text = '自动写入 hosts 文件 (需管理员)'
     $cbHosts.Checked = $true
-    $cbHosts.Location = New-Object System.Drawing.Point(110, 180)
+    $cbHosts.Location = New-Object System.Drawing.Point(120, 295)
     $cbHosts.AutoSize = $true
     $dlg.Controls.Add($cbHosts)
 
+    # 自动 reload nginx
+    $cbReload = New-Object System.Windows.Forms.CheckBox
+    $cbReload.Text = '创建后立即 nginx -s reload'
+    $cbReload.Checked = $true
+    $cbReload.Location = New-Object System.Drawing.Point(120, 320)
+    $cbReload.AutoSize = $true
+    $dlg.Controls.Add($cbReload)
+
     $tbName.Add_TextChanged({
-        if ([string]::IsNullOrWhiteSpace($tbRoot.Text)) {
+        if ($tbRoot.Tag -ne 'manual') {
             $tbRoot.Text = Join-Path $WP_WwwDir $tbName.Text
         }
+        if ($tbServer.Tag -ne 'manual') {
+            if (-not [string]::IsNullOrWhiteSpace($tbName.Text)) {
+                $tbServer.Text = "$($tbName.Text).local"
+            }
+        }
     })
+    $tbRoot.Add_TextChanged({ if ($tbRoot.Focused) { $tbRoot.Tag = 'manual' } })
+    $tbServer.Add_TextChanged({ if ($tbServer.Focused) { $tbServer.Tag = 'manual' } })
+    if ($PresetServer) { $tbServer.Tag = 'manual' }
 
     $btnOK = New-Object System.Windows.Forms.Button
     $btnOK.Text = '创建'
-    $btnOK.Size = New-Object System.Drawing.Size(90, 32)
-    $btnOK.Location = New-Object System.Drawing.Point(280, 230)
+    $btnOK.Size = New-Object System.Drawing.Size(100, 36)
+    $btnOK.Location = New-Object System.Drawing.Point(330, 370)
+    $btnOK.BackColor = [System.Drawing.Color]::FromArgb(45, 116, 184)
+    $btnOK.ForeColor = [System.Drawing.Color]::White
+    $btnOK.FlatStyle = 'Flat'
+    $btnOK.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 10, [System.Drawing.FontStyle]::Bold)
     $btnCancel = New-Object System.Windows.Forms.Button
     $btnCancel.Text = '取消'
-    $btnCancel.Size = New-Object System.Drawing.Size(90, 32)
-    $btnCancel.Location = New-Object System.Drawing.Point(375, 230)
+    $btnCancel.Size = New-Object System.Drawing.Size(100, 36)
+    $btnCancel.Location = New-Object System.Drawing.Point(435, 370)
     $btnCancel.DialogResult = 'Cancel'
     $dlg.Controls.AddRange(@($btnOK, $btnCancel))
     $dlg.CancelButton = $btnCancel
+    $dlg.AcceptButton = $btnOK
 
     $btnOK.Add_Click({
         try {
+            if ([string]::IsNullOrWhiteSpace($tbName.Text)) {
+                [System.Windows.Forms.MessageBox]::Show('请填写站点名称','提示','OK','Warning')|Out-Null; return
+            }
             $port = 80
             [int]::TryParse($tbPort.Text, [ref]$port) | Out-Null
-            $root = if ([string]::IsNullOrWhiteSpace($tbRoot.Text)) { Join-Path $WP_WwwDir $tbName.Text } else { $tbRoot.Text }
-            Add-WPSite -Name $tbName.Text -ServerName $tbServer.Text -Root $root -Port $port -AddHosts $cbHosts.Checked
+            $rootInput = if ([string]::IsNullOrWhiteSpace($tbRoot.Text)) { Join-Path $WP_WwwDir $tbName.Text } else { $tbRoot.Text }
+
+            $tplKey = @('php','laravel','wordpress','static')[$cbTpl.SelectedIndex]
+            $tplInfo = Get-WPSiteTemplateContent -Template $tplKey -ServerName $tbServer.Text
+
+            # 实际给 nginx 的 root: Laravel 类的指向 root/public
+            $vhostRoot = if ($tplInfo.SubRoot) { Join-Path $rootInput $tplInfo.SubRoot } else { $rootInput }
+            if (-not (Test-Path $vhostRoot)) { New-Item -ItemType Directory $vhostRoot -Force | Out-Null }
+
+            # 写默认文件
+            $defaultFile = Join-Path $rootInput $tplInfo.File
+            $defaultDir  = Split-Path $defaultFile -Parent
+            if (-not (Test-Path $defaultDir)) { New-Item -ItemType Directory $defaultDir -Force | Out-Null }
+            if (-not (Test-Path $defaultFile)) {
+                Set-Content -Path $defaultFile -Value $tplInfo.Body -Encoding UTF8
+            }
+
+            Add-WPSite -Name $tbName.Text -ServerName $tbServer.Text -Root $vhostRoot -Port $port -AddHosts $cbHosts.Checked
+
+            # 可选: 创建 MySQL 数据库
+            if ($cbCreateDb.Checked) {
+                $mysql = Join-Path $WP_MysqlDir 'bin\mysql.exe'
+                if (-not (Test-Path $mysql)) {
+                    [System.Windows.Forms.MessageBox]::Show('MySQL 未安装,跳过数据库创建','提示','OK','Warning')|Out-Null
+                } elseif (-not (Get-WPMysqlStatus).Running) {
+                    [System.Windows.Forms.MessageBox]::Show('MySQL 未运行,跳过数据库创建','提示','OK','Warning')|Out-Null
+                } else {
+                    $dbName = ($tbName.Text -replace '[^a-zA-Z0-9_]','_')
+                    $pwd = $tbDbPwd.Text
+                    $sql = "CREATE DATABASE IF NOT EXISTS ``$dbName`` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+                    $arglist = @('-u','root','--protocol=tcp','-h','127.0.0.1')
+                    if ($pwd) { $arglist += @('-p' + $pwd) }
+                    $arglist += @('-e', $sql)
+                    & $mysql @arglist 2>&1 | Out-Null
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-WPLog "数据库 $dbName 已创建"
+                    } else {
+                        [System.Windows.Forms.MessageBox]::Show("数据库创建失败 (密码不对?). 你可以稍后手动 CREATE DATABASE ``$dbName``;",'警告','OK','Warning')|Out-Null
+                    }
+                }
+            }
+
+            if ($cbReload.Checked) { Invoke-WPNginxReload | Out-Null }
+
             $dlg.DialogResult = 'OK'; $dlg.Close()
         } catch {
             [System.Windows.Forms.MessageBox]::Show("创建失败: $_", '错误', 'OK', 'Error') | Out-Null
         }
     })
 
-    if ($dlg.ShowDialog($form) -eq 'OK') { Refresh-WPSitesList }
+    if ($dlg.ShowDialog($form) -eq 'OK') {
+        Refresh-WPSitesList
+        if (Get-Command Refresh-WPHomeSites -ErrorAction SilentlyContinue) { Refresh-WPHomeSites }
+    }
 }
 
 $btnAddSite.Add_Click({ Show-AddSiteDialog })
@@ -1019,14 +1309,15 @@ function New-AutoRow {
     $script:autoRows[$Key] = @{ Name = $lblName; Stat = $lblStat; Btn = $btn }
 }
 
-New-AutoRow -Key 'panel' -Label 'WinPHP 面板 (开机自启)' -Y 38
-New-AutoRow -Key 'nginx' -Label 'Nginx 服务'             -Y 88
-New-AutoRow -Key 'php'   -Label 'PHP-CGI 服务'           -Y 138
-New-AutoRow -Key 'mysql' -Label 'MySQL 服务'             -Y 188
+New-AutoRow -Key 'panel' -Label 'WinPHP 面板 (开机自启)' -Y 22
+New-AutoRow -Key 'nginx' -Label 'Nginx 服务'             -Y 60
+New-AutoRow -Key 'php'   -Label 'PHP-CGI 服务'           -Y 98
+New-AutoRow -Key 'mysql' -Label 'MySQL 服务'             -Y 136
+New-AutoRow -Key 'pg'    -Label 'PostgreSQL 服务'        -Y 174
 
 $lblFoot = New-Object System.Windows.Forms.Label
-$lblFoot.Text = "说明: 启用面板自启 = 任务计划程序登录时启动 WinPHP.bat (无 UAC 弹窗)`n      启用三大服务 = 通过 NSSM 注册为 Windows 服务, 在系统启动时由 services.msc 拉起"
-$lblFoot.Location = New-Object System.Drawing.Point(20, 240)
+$lblFoot.Text = "说明: 启用面板自启 = 任务计划程序登录时启动 WinPHP.bat (无 UAC 弹窗)`n      启用各服务 = 通过 NSSM 注册为 Windows 服务, 在系统启动时由 services.msc 拉起"
+$lblFoot.Location = New-Object System.Drawing.Point(20, 220)
 $lblFoot.Size = New-Object System.Drawing.Size(860, 50)
 $lblFoot.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
 $lblFoot.ForeColor = [System.Drawing.Color]::DimGray
@@ -1049,8 +1340,9 @@ function Refresh-WPAutoStartList {
         'nginx' = @{ Name = $WP_SvcNginx; Exe = (Join-Path $WP_NginxDir 'nginx.exe') }
         'php'   = @{ Name = $WP_SvcPhp;   Exe = (Join-Path $WP_PhpDir   'php-cgi.exe') }
         'mysql' = @{ Name = $WP_SvcMysql; Exe = (Join-Path $WP_MysqlDir 'bin\mysqld.exe') }
+        'pg'    = @{ Name = $WP_SvcPg;    Exe = (Join-Path $WP_PgDir    'bin\postgres.exe') }
     }
-    foreach ($k in @('nginx','php','mysql')) {
+    foreach ($k in @('nginx','php','mysql','pg')) {
         $r = $script:autoRows[$k]
         $info = Get-WPServiceInfo $svcMap[$k].Name
         if (-not (Test-Path $svcMap[$k].Exe)) {
@@ -1093,6 +1385,11 @@ $autoRows['mysql'].Btn.Add_Click({
     else { Install-WPServiceMysql | Out-Null }
     Refresh-WPAutoStartList; Refresh-WPHomeStatus
 })
+$autoRows['pg'].Btn.Add_Click({
+    if ((Get-WPServiceInfo $WP_SvcPg).Installed) { Uninstall-WPService $WP_SvcPg | Out-Null }
+    else { Install-WPServicePostgres | Out-Null }
+    Refresh-WPAutoStartList; Refresh-WPHomeStatus
+})
 
 # 一键按钮
 $btnAllOn.Add_Click({
@@ -1102,7 +1399,7 @@ $btnAllOn.Add_Click({
         $r = Enable-WPAllAutoStart
         $msg = @()
         $msg += "面板自启: $(if ($r.Panel) {'✓ 已启用'} else {'✗ 失败'})"
-        foreach ($t in 'Nginx','Php','Mysql') {
+        foreach ($t in 'Nginx','Php','Mysql','Postgres') {
             if ($r[$t] -eq $null) { $msg += "$t : (组件未安装, 跳过)" }
             elseif ($r[$t])       { $msg += "$t : ✓ 已注册" }
             else                  { $msg += "$t : ✗ 失败" }
@@ -1181,6 +1478,7 @@ $timer.Start()
 $form.Add_Shown({
     Refresh-WPHomeStatus
     Refresh-WPSitesList
+    Refresh-WPHomeSites
     Refresh-WPDbInfo
     Refresh-WPAutoStartList
     Write-WPLog "WinPHP 启动. 根目录: $WP_Root"

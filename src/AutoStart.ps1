@@ -5,6 +5,7 @@
 $Global:WP_SvcNginx = 'WinPHPNginx'
 $Global:WP_SvcPhp   = 'WinPHPPhp'
 $Global:WP_SvcMysql = 'WinPHPMySQL'
+$Global:WP_SvcPg    = 'WinPHPPostgreSQL'
 $Global:WP_TaskName = 'WinPHPPanelAutoStart'
 
 # ============================================================
@@ -170,6 +171,33 @@ function Install-WPServiceMysql {
     return $true
 }
 
+function Install-WPServicePostgres {
+    $nssm = Install-WPNssm
+    $exe = Join-Path $WP_PgDir 'bin\postgres.exe'
+    if (-not (Test-Path $exe)) { Write-WPLog 'PostgreSQL 未安装,无法注册服务' 'ERROR'; return $false }
+
+    if ((Get-WPServiceInfo $WP_SvcPg).Installed) {
+        & $nssm stop   $WP_SvcPg 2>&1 | Out-Null
+        & $nssm remove $WP_SvcPg confirm 2>&1 | Out-Null
+    }
+    Stop-WPPostgres | Out-Null
+
+    # 服务启动前确保 data 已初始化
+    if (-not (Test-Path (Join-Path $WP_PgDir 'data\PG_VERSION'))) {
+        Initialize-WPPostgresData | Out-Null
+    }
+
+    $dataDir = Join-Path $WP_PgDir 'data'
+    & $nssm install  $WP_SvcPg $exe "-D" "$dataDir"
+    & $nssm set      $WP_SvcPg AppDirectory $WP_PgDir
+    & $nssm set      $WP_SvcPg Start SERVICE_AUTO_START
+    & $nssm set      $WP_SvcPg Description 'WinPHP PostgreSQL Database Server'
+    & $nssm set      $WP_SvcPg AppStdout (Join-Path $WP_PgDir 'logs\nssm_stdout.log')
+    & $nssm set      $WP_SvcPg AppStderr (Join-Path $WP_PgDir 'logs\nssm_stderr.log')
+    Write-WPLog "服务 $WP_SvcPg 已注册 (开机自启)"
+    return $true
+}
+
 function Uninstall-WPService {
     param([string]$Name)
     if (-not (Get-WPServiceInfo $Name).Installed) { return $true }
@@ -242,13 +270,14 @@ function Enable-WPAllAutoStart {
     Install-WPNssm | Out-Null
 
     $results = @{}
-    if (Test-Path (Join-Path $WP_NginxDir 'nginx.exe'))         { $results.Nginx = Install-WPServiceNginx } else { $results.Nginx = $null }
-    if (Test-Path (Join-Path $WP_PhpDir   'php-cgi.exe'))       { $results.Php   = Install-WPServicePhp   } else { $results.Php   = $null }
-    if (Test-Path (Join-Path $WP_MysqlDir 'bin\mysqld.exe'))    { $results.Mysql = Install-WPServiceMysql } else { $results.Mysql = $null }
+    if (Test-Path (Join-Path $WP_NginxDir 'nginx.exe'))      { $results.Nginx    = Install-WPServiceNginx    } else { $results.Nginx    = $null }
+    if (Test-Path (Join-Path $WP_PhpDir   'php-cgi.exe'))    { $results.Php      = Install-WPServicePhp      } else { $results.Php      = $null }
+    if (Test-Path (Join-Path $WP_MysqlDir 'bin\mysqld.exe')) { $results.Mysql    = Install-WPServiceMysql    } else { $results.Mysql    = $null }
+    if (Test-Path (Join-Path $WP_PgDir    'bin\postgres.exe')) { $results.Postgres = Install-WPServicePostgres } else { $results.Postgres = $null }
     $results.Panel = Enable-WPPanelAutoStart
 
     # 启动已注册的服务
-    foreach ($n in @($WP_SvcNginx, $WP_SvcPhp, $WP_SvcMysql)) {
+    foreach ($n in @($WP_SvcNginx, $WP_SvcPhp, $WP_SvcMysql, $WP_SvcPg)) {
         if ((Get-WPServiceInfo $n).Installed) {
             try { Start-Service -Name $n -ErrorAction Stop } catch {}
         }
@@ -260,6 +289,7 @@ function Disable-WPAllAutoStart {
     Uninstall-WPService $WP_SvcNginx | Out-Null
     Uninstall-WPService $WP_SvcPhp   | Out-Null
     Uninstall-WPService $WP_SvcMysql | Out-Null
+    Uninstall-WPService $WP_SvcPg    | Out-Null
     Disable-WPPanelAutoStart | Out-Null
     return $true
 }
