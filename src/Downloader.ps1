@@ -4,33 +4,60 @@ function Invoke-WPDownload {
     param(
         [string]$Url,
         [string]$OutFile,
-        [scriptblock]$ProgressCallback = $null
+        [scriptblock]$ProgressCallback = $null,
+        [int]$MaxRetry = 3
     )
-    Write-WPLog "下载: $Url"
     $tmpDir = Split-Path $OutFile -Parent
     if (-not (Test-Path $tmpDir)) { New-Item -ItemType Directory $tmpDir -Force | Out-Null }
 
-    # 启用 TLS 1.2，避免 Windows 10 旧默认拒绝部分官方源
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
+    # TLS 1.2/1.3 (有些 .NET 4.5 不支持 Tls13 枚举, 用值兜底)
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = `
+            [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]'Tls13'
+    } catch {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    }
 
-    $req = [System.Net.HttpWebRequest]::Create($Url)
-    $req.UserAgent = 'WinPHP/1.0'
-    $req.Timeout = 30000
-    $resp = $req.GetResponse()
-    $total = $resp.ContentLength
-    $stream = $resp.GetResponseStream()
-    $fs = [System.IO.File]::Create($OutFile)
-    $buffer = New-Object byte[] 65536
-    $read = 0L
-    while (($n = $stream.Read($buffer, 0, $buffer.Length)) -gt 0) {
-        $fs.Write($buffer, 0, $n)
-        $read += $n
-        if ($ProgressCallback) {
-            & $ProgressCallback $read $total
+    $ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+    $lastErr = $null
+    for ($attempt = 1; $attempt -le $MaxRetry; $attempt++) {
+        Write-WPLog "下载 (第 $attempt/$MaxRetry 次): $Url"
+        try {
+            $req = [System.Net.HttpWebRequest]::Create($Url)
+            $req.UserAgent = $ua
+            $req.Accept    = '*/*'
+            $req.Headers.Add('Accept-Language', 'en-US,en;q=0.9,zh-CN;q=0.8')
+            $req.AllowAutoRedirect = $true
+            $req.Timeout       = 60000
+            $req.ReadWriteTimeout = 60000
+            $req.KeepAlive     = $false
+
+            $resp   = $req.GetResponse()
+            $total  = $resp.ContentLength
+            $stream = $resp.GetResponseStream()
+            $fs     = [System.IO.File]::Create($OutFile)
+            $buffer = New-Object byte[] 65536
+            $read   = 0L
+            try {
+                while (($n = $stream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+                    $fs.Write($buffer, 0, $n)
+                    $read += $n
+                    if ($ProgressCallback) { & $ProgressCallback $read $total }
+                }
+            } finally {
+                $fs.Close(); $stream.Close(); $resp.Close()
+            }
+            Write-WPLog "下载完成: $OutFile ($([math]::Round($read/1MB, 2)) MB)"
+            return
+        } catch {
+            $lastErr = $_
+            Write-WPLog "下载失败 (第 $attempt 次): $_" 'WARN'
+            if (Test-Path $OutFile) { Remove-Item $OutFile -Force -ErrorAction SilentlyContinue }
+            if ($attempt -lt $MaxRetry) { Start-Sleep -Seconds ($attempt * 2) }
         }
     }
-    $fs.Close(); $stream.Close(); $resp.Close()
-    Write-WPLog "下载完成: $OutFile ($([math]::Round($read/1MB, 2)) MB)"
+    throw "下载失败 (已重试 $MaxRetry 次): $lastErr"
 }
 
 function Expand-WPZip {

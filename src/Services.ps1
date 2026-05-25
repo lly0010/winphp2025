@@ -97,16 +97,31 @@ function Get-WPNginxStatus {
     }
 }
 
+# 内部: 安全执行 nginx 命令, 不让 stderr 输出被 PS 当成终结异常
+function Invoke-WPNginxSafe {
+    param([string]$Exe, [string[]]$CmdArgs)
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = & $Exe @CmdArgs 2>&1
+        return @{ Output = ($out | Out-String); ExitCode = $LASTEXITCODE }
+    } catch {
+        return @{ Output = "$_"; ExitCode = -1 }
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+}
+
 function Start-WPNginx {
     $exe = Join-Path $WP_NginxDir 'nginx.exe'
     if (-not (Test-Path $exe)) { Write-WPLog 'Nginx 未安装' 'WARN'; return $false }
 
     if ((Get-WPNginxStatus).Running) { Write-WPLog 'Nginx 已在运行' 'WARN'; return $true }
 
-    # 配置语法检查
-    $test = & $exe -t -p $WP_NginxDir 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Write-WPLog "Nginx 配置检查失败: $test" 'ERROR'
+    # 配置语法检查 (nginx 会把 "syntax is ok" 写到 stderr, 用 Safe 包装防止 PS 抛异常)
+    $r = Invoke-WPNginxSafe -Exe $exe -CmdArgs @('-t','-p',$WP_NginxDir)
+    if ($r.ExitCode -ne 0) {
+        Write-WPLog "Nginx 配置检查失败: $($r.Output)" 'ERROR'
         return $false
     }
 
@@ -126,11 +141,13 @@ function Start-WPNginx {
 
 function Stop-WPNginx {
     if (Test-WPServiceInstalled $Global:WP_SvcNginx) {
-        try { Stop-Service -Name $Global:WP_SvcNginx -Force -ErrorAction Stop } catch {}
+        try { Stop-Service -Name $Global:WP_SvcNginx -Force -ErrorAction SilentlyContinue } catch {}
     }
     $exe = Join-Path $WP_NginxDir 'nginx.exe'
-    if (Test-Path $exe) {
-        & $exe -s stop -p $WP_NginxDir 2>&1 | Out-Null
+    # 仅在确实有 nginx 进程跑着时才发 -s stop, 否则 nginx 会因为读不到 pid 文件而报错
+    $running = Get-WPProcess -Name 'nginx' -PathFilter $WP_NginxDir
+    if ((Test-Path $exe) -and ($running.Count -gt 0)) {
+        Invoke-WPNginxSafe -Exe $exe -CmdArgs @('-s','stop','-p',$WP_NginxDir) | Out-Null
     }
     Start-Sleep -Milliseconds 400
     Get-WPProcess -Name 'nginx' -PathFilter $WP_NginxDir | ForEach-Object {
@@ -149,9 +166,15 @@ function Restart-WPNginx {
 function Invoke-WPNginxReload {
     $exe = Join-Path $WP_NginxDir 'nginx.exe'
     if (-not (Test-Path $exe)) { return $false }
-    $test = & $exe -t -p $WP_NginxDir 2>&1
-    if ($LASTEXITCODE -ne 0) { Write-WPLog "配置错误: $test" 'ERROR'; return $false }
-    & $exe -s reload -p $WP_NginxDir 2>&1 | Out-Null
+    $r = Invoke-WPNginxSafe -Exe $exe -CmdArgs @('-t','-p',$WP_NginxDir)
+    if ($r.ExitCode -ne 0) { Write-WPLog "配置错误: $($r.Output)" 'ERROR'; return $false }
+    # 没在运行就不发 reload, 避免 nginx 因 pid 文件错误叫
+    $running = Get-WPProcess -Name 'nginx' -PathFilter $WP_NginxDir
+    if ($running.Count -eq 0) {
+        Write-WPLog 'Nginx 未运行, 跳过 reload' 'WARN'
+        return $false
+    }
+    Invoke-WPNginxSafe -Exe $exe -CmdArgs @('-s','reload','-p',$WP_NginxDir) | Out-Null
     Write-WPLog 'Nginx 已重载配置'
     return $true
 }

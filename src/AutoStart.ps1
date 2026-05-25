@@ -28,7 +28,32 @@ function Install-WPNssm {
 
     Write-WPLog '首次启用自启动, 正在下载 NSSM...'
     $zip = Join-Path $WP_TmpDir 'nssm.zip'
-    Invoke-WPDownload -Url $nssmInfo.url -OutFile $zip -ProgressCallback $ProgressCallback
+
+    # 多个候选源: 官方 + 备用镜像 (避免国内访问 nssm.cc 失败)
+    $urls = @($nssmInfo.url)
+    if ($nssmInfo.PSObject.Properties.Name -contains 'mirrors' -and $nssmInfo.mirrors) {
+        $urls += $nssmInfo.mirrors
+    }
+
+    $downloaded = $false
+    foreach ($u in $urls) {
+        try {
+            Invoke-WPDownload -Url $u -OutFile $zip -ProgressCallback $ProgressCallback -MaxRetry 2
+            $downloaded = $true
+            break
+        } catch {
+            Write-WPLog "下载源失败: $u  ($_)" 'WARN'
+        }
+    }
+
+    if (-not $downloaded) {
+        $msg = "NSSM 自动下载失败 (nssm.cc 可能 503 或被网络阻挡).`n`n请手动操作:`n" +
+               "1. 浏览器打开 https://nssm.cc/download`n" +
+               "2. 下载 nssm-2.24.zip`n" +
+               "3. 解压, 把 win64\nssm.exe 拷到 $WP_BinDir`n" +
+               "4. 重试本操作"
+        throw $msg
+    }
 
     $tmpExtract = Join-Path $env:TEMP ("winphp_nssm_" + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory $tmpExtract -Force | Out-Null
@@ -39,7 +64,7 @@ function Install-WPNssm {
         $src = Join-Path $tmpExtract $nssmInfo.exeInZip.Replace('/','\')
         if (-not (Test-Path $src)) {
             # 兜底: 在解压树里搜
-            $src = Get-ChildItem $tmpExtract -Recurse -Filter 'nssm.exe' |
+            $src = Get-ChildItem $tmpExtract -Recurse -Filter 'nssm.exe' -ErrorAction SilentlyContinue |
                    Where-Object { $_.FullName -match 'win64' } |
                    Select-Object -ExpandProperty FullName -First 1
             if (-not $src) { throw '在 NSSM 压缩包内未找到 win64/nssm.exe' }

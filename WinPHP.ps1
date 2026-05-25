@@ -1,7 +1,9 @@
 ﻿# WinPHP.ps1 - WinForms 主 GUI
 # 类似 phpStudy 的 Windows PHP/MySQL/Nginx 一键部署面板
 
-$ErrorActionPreference = 'Stop'
+# 注意: 不要把 ErrorActionPreference 设为 Stop. 调用 nginx 等原生程序时,
+# 它们写到 stderr 的非错误诊断信息(如 "syntax is ok") 会被 PS 视为终结错误,
+# 导致 WinForms 未处理异常对话框. 保持默认 'Continue' 即可.
 
 # 加载模块
 $srcDir = Join-Path $PSScriptRoot 'src'
@@ -454,10 +456,25 @@ function Invoke-WPToggleAutoStart {
     if (Get-Command Refresh-WPAutoStartList -ErrorAction SilentlyContinue) { Refresh-WPAutoStartList }
 }
 
+# 通用: 把按钮点击包到 try/catch 里, 任何异常都用 MessageBox 而不是抛到 WinForms
+function Invoke-WPSafe {
+    param([string]$Action, [scriptblock]$Block)
+    Set-WPStatus $Action
+    try {
+        & $Block
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("操作失败: $_", '错误', 'OK', 'Error') | Out-Null
+        Write-WPLog "$Action 失败: $_" 'ERROR'
+    } finally {
+        Refresh-WPHomeStatus
+        Set-WPStatus '就绪'
+    }
+}
+
 # 首页按钮事件绑定
-$boxNginx.Controls['btnStart'].Add_Click({ Set-WPStatus '正在启动 Nginx...'; Start-WPNginx | Out-Null; Refresh-WPHomeStatus; Set-WPStatus '就绪' })
-$boxNginx.Controls['btnStop'].Add_Click({ Set-WPStatus '正在停止 Nginx...'; Stop-WPNginx | Out-Null; Refresh-WPHomeStatus; Set-WPStatus '就绪' })
-$boxNginx.Controls['btnRestart'].Add_Click({ Set-WPStatus '正在重启 Nginx...'; Restart-WPNginx | Out-Null; Refresh-WPHomeStatus; Set-WPStatus '就绪' })
+$boxNginx.Controls['btnStart'].Add_Click({   Invoke-WPSafe '正在启动 Nginx...'  { Start-WPNginx   | Out-Null } })
+$boxNginx.Controls['btnStop'].Add_Click({    Invoke-WPSafe '正在停止 Nginx...'  { Stop-WPNginx    | Out-Null } })
+$boxNginx.Controls['btnRestart'].Add_Click({ Invoke-WPSafe '正在重启 Nginx...'  { Restart-WPNginx | Out-Null } })
 $boxNginx.Controls['btnInstall'].Add_Click({ Show-InstallDialog -Type 'nginx' })
 $boxNginx.Controls['btnUninstall'].Add_Click({ Invoke-WPUninstallComponent -Type 'nginx' -DisplayName 'Nginx' })
 $boxNginx.Controls['btnConfig'].Add_Click({ Show-ConfigEditor -FilePath (Join-Path $WP_NginxDir 'conf\nginx.conf') -Title 'nginx.conf' })
@@ -465,9 +482,9 @@ $boxNginx.Controls['btnAuto'].Add_Click({
     Invoke-WPToggleAutoStart -Type 'nginx' -ServiceName $Global:WP_SvcNginx -Installer { Install-WPServiceNginx | Out-Null }
 })
 
-$boxPhp.Controls['btnStart'].Add_Click({ Set-WPStatus '正在启动 PHP-CGI...'; Start-WPPhp | Out-Null; Refresh-WPHomeStatus; Set-WPStatus '就绪' })
-$boxPhp.Controls['btnStop'].Add_Click({ Set-WPStatus '正在停止 PHP-CGI...'; Stop-WPPhp | Out-Null; Refresh-WPHomeStatus; Set-WPStatus '就绪' })
-$boxPhp.Controls['btnRestart'].Add_Click({ Set-WPStatus '正在重启 PHP-CGI...'; Restart-WPPhp | Out-Null; Refresh-WPHomeStatus; Set-WPStatus '就绪' })
+$boxPhp.Controls['btnStart'].Add_Click({   Invoke-WPSafe '正在启动 PHP-CGI...'  { Start-WPPhp   | Out-Null } })
+$boxPhp.Controls['btnStop'].Add_Click({    Invoke-WPSafe '正在停止 PHP-CGI...'  { Stop-WPPhp    | Out-Null } })
+$boxPhp.Controls['btnRestart'].Add_Click({ Invoke-WPSafe '正在重启 PHP-CGI...'  { Restart-WPPhp | Out-Null } })
 $boxPhp.Controls['btnInstall'].Add_Click({ Show-InstallDialog -Type 'php' })
 $boxPhp.Controls['btnUninstall'].Add_Click({ Invoke-WPUninstallComponent -Type 'php' -DisplayName 'PHP' })
 $boxPhp.Controls['btnConfig'].Add_Click({ Show-ConfigEditor -FilePath (Join-Path $WP_PhpDir 'php.ini') -Title 'php.ini' })
@@ -475,9 +492,9 @@ $boxPhp.Controls['btnAuto'].Add_Click({
     Invoke-WPToggleAutoStart -Type 'php' -ServiceName $Global:WP_SvcPhp -Installer { Install-WPServicePhp | Out-Null }
 })
 
-$boxMysql.Controls['btnStart'].Add_Click({ Set-WPStatus '正在启动 MySQL...'; Start-WPMysql | Out-Null; Refresh-WPHomeStatus; Set-WPStatus '就绪' })
-$boxMysql.Controls['btnStop'].Add_Click({ Set-WPStatus '正在停止 MySQL...'; Stop-WPMysql | Out-Null; Refresh-WPHomeStatus; Set-WPStatus '就绪' })
-$boxMysql.Controls['btnRestart'].Add_Click({ Set-WPStatus '正在重启 MySQL...'; Restart-WPMysql | Out-Null; Refresh-WPHomeStatus; Set-WPStatus '就绪' })
+$boxMysql.Controls['btnStart'].Add_Click({   Invoke-WPSafe '正在启动 MySQL...'  { Start-WPMysql   | Out-Null } })
+$boxMysql.Controls['btnStop'].Add_Click({    Invoke-WPSafe '正在停止 MySQL...'  { Stop-WPMysql    | Out-Null } })
+$boxMysql.Controls['btnRestart'].Add_Click({ Invoke-WPSafe '正在重启 MySQL...'  { Restart-WPMysql | Out-Null } })
 $boxMysql.Controls['btnInstall'].Add_Click({ Show-InstallDialog -Type 'mysql' })
 $boxMysql.Controls['btnUninstall'].Add_Click({ Invoke-WPUninstallComponent -Type 'mysql' -DisplayName 'MySQL' })
 $boxMysql.Controls['btnConfig'].Add_Click({ Show-ConfigEditor -FilePath (Join-Path $WP_MysqlDir 'my.ini') -Title 'my.ini' })
@@ -880,8 +897,8 @@ $tabTools.Controls.AddRange(@(
     (New-ToolButton 'Nginx 配置测试'     20  160 {
         $exe = Join-Path $WP_NginxDir 'nginx.exe'
         if (Test-Path $exe) {
-            $o = & $exe -t -p $WP_NginxDir 2>&1
-            [System.Windows.Forms.MessageBox]::Show(($o -join "`n"),'结果','OK','Information')|Out-Null
+            $r = Invoke-WPNginxSafe -Exe $exe -CmdArgs @('-t','-p',$WP_NginxDir)
+            [System.Windows.Forms.MessageBox]::Show($r.Output,'结果','OK','Information')|Out-Null
         }
     }),
     (New-ToolButton 'Nginx 重载'         210 160 { Invoke-WPNginxReload | Out-Null }),
@@ -934,12 +951,38 @@ $btnAllOff.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 11, [Syst
 $autoTop.Controls.Add($btnAllOff)
 
 $lblTopHint = New-Object System.Windows.Forms.Label
-$lblTopHint.Text = "首次启用会自动从 nssm.cc 下载 NSSM (约 200KB), 之后即可完全开机自启."
-$lblTopHint.Location = New-Object System.Drawing.Point(565, 55)
-$lblTopHint.Size = New-Object System.Drawing.Size(320, 40)
+$lblTopHint.Text = "首次启用会自动从 nssm.cc 下载 NSSM (约 200KB).`n如果下载失败 (国内可能 503), 可点右侧按钮手动指定已下载的 nssm.exe."
+$lblTopHint.Location = New-Object System.Drawing.Point(565, 38)
+$lblTopHint.Size = New-Object System.Drawing.Size(320, 45)
 $lblTopHint.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
 $lblTopHint.ForeColor = [System.Drawing.Color]::DimGray
 $autoTop.Controls.Add($lblTopHint)
+
+$btnPickNssm = New-Object System.Windows.Forms.Button
+$btnPickNssm.Text = '手动指定 nssm.exe...'
+$btnPickNssm.Size = New-Object System.Drawing.Size(180, 28)
+$btnPickNssm.Location = New-Object System.Drawing.Point(700, 78)
+$autoTop.Controls.Add($btnPickNssm)
+$btnPickNssm.Add_Click({
+    $current = Get-WPNssmPath
+    if ($current) {
+        $r = [System.Windows.Forms.MessageBox]::Show("已有 nssm.exe: $current`n是否替换?", '确认', 'YesNo', 'Question')
+        if ($r -ne 'Yes') { return }
+    }
+    $ofd = New-Object System.Windows.Forms.OpenFileDialog
+    $ofd.Filter = 'nssm.exe|nssm.exe|可执行文件 (*.exe)|*.exe'
+    $ofd.Title  = '选择 nssm.exe (从 https://nssm.cc/download 下载后解压 win64\nssm.exe)'
+    if ($ofd.ShowDialog() -eq 'OK') {
+        try {
+            Copy-Item $ofd.FileName (Join-Path $WP_BinDir 'nssm.exe') -Force
+            Write-WPLog "NSSM 已手动安装: $($ofd.FileName)"
+            [System.Windows.Forms.MessageBox]::Show('NSSM 已就绪. 现在可以点"一键启用全部"或单独启用各项.','完成','OK','Information') | Out-Null
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show("复制失败: $_",'错误','OK','Error') | Out-Null
+        }
+    }
+})
+
 $tabAuto.Controls.Add($autoTop)
 
 # 列表区
