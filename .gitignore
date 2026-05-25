@@ -1,0 +1,13 @@
+bin/
+tmp/
+logs/
+config/state.json
+config/sites.json
+www/*
+!www/default/
+www/default/uploads/
+*.log
+*.zip
+*.tmp
+Thumbs.db
+.DS_Store
