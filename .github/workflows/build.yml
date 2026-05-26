@@ -69,7 +69,7 @@ jobs:
           path: build/bin/WinPHP.exe
           if-no-files-found: error
 
-      # ─── 发布逻辑 (用 gh CLI 直接操作, Windows runner 自带) ───────
+      # ─── 发布逻辑 ───────────────────────────────────────────────
       - name: Debug release context
         shell: pwsh
         run: |
@@ -79,7 +79,28 @@ jobs:
           echo "sha        = ${{ github.sha }}"
           echo "is_tag     = ${{ startsWith(github.ref, 'refs/tags/') }}"
 
-      # 1) push tag v* → 正式版 release (固定 tag, 不删除已有)
+      # 读 VERSION 文件 (供 main push 触发的正式版发布)
+      - name: Read VERSION file
+        id: version_file
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: |
+          if (Test-Path VERSION) {
+            $v = (Get-Content VERSION -Raw).Trim()
+            if ($v -match '^[0-9]+(\.[0-9]+){1,2}$') {
+              Write-Host "VERSION file content: $v"
+              "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+              "has_version=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            } else {
+              Write-Host "VERSION file content '$v' is not valid (expected like '1.0' or '1.2.3'), skipping"
+              "has_version=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            }
+          } else {
+            Write-Host "No VERSION file at repo root, skipping VERSION-based release"
+            "has_version=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          }
+
+      # 1) push tag v* → 正式版 release
       - name: Release (tag push)
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
@@ -95,8 +116,6 @@ jobs:
 
           下载 ``WinPHP.exe``, 放到空目录, 右键 → 以管理员身份运行.
           "@
-
-          # 如已存在则替换附件; 否则新建
           gh release view $tag 2>$null
           if ($LASTEXITCODE -eq 0) {
             Write-Host "Release $tag already exists, uploading WinPHP.exe (overwrite)..."
@@ -110,7 +129,40 @@ jobs:
               --latest
           }
 
-      # 2) 手动 dispatch + 输入 tag → 用该 tag 创建 release
+      # 2) main push + VERSION 文件含合法版本号 → 创建 v{VERSION} 正式版
+      #    已存在同 tag 的 release 则跳过 (避免每次提交都重发同一版本)
+      - name: Release (VERSION file)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.version_file.outputs.has_version == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $v = "${{ steps.version_file.outputs.version }}"
+          $tag = "v$v"
+          $size = "${{ steps.artifact_info.outputs.size }}"
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release $tag already exists. (改 VERSION 文件为新版本号才会触发新 release)"
+            exit 0
+          }
+          $body = @"
+          **WinPHP $tag** - 正式版
+
+          体积: $size MB . 单文件 EXE . 双击运行需管理员权限
+
+          下载 ``WinPHP.exe``, 放到空目录, 右键 → 以管理员身份运行.
+
+          ---
+          *由 VERSION 文件触发自动构建*
+          "@
+          Write-Host "Creating new release $tag from VERSION file..."
+          gh release create $tag build/bin/WinPHP.exe `
+            --title "WinPHP $tag" `
+            --notes $body `
+            --target ${{ github.sha }} `
+            --latest
+
+      # 3) 手动 dispatch + 输入 tag → 用该 tag 创建 release
       - name: Release (manual dispatch with tag)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != ''
         shell: pwsh
@@ -129,7 +181,7 @@ jobs:
               --latest
           }
 
-      # 3) 任何非 tag 的 push → 删除旧的 latest, 重建滚动 latest
+      # 4) 任何非 tag 的 push → 删除旧的 latest, 重建滚动 latest (开发预览版)
       - name: Release (rolling latest)
         if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
         shell: pwsh
@@ -146,21 +198,15 @@ jobs:
 
           开发版本. 稳定版请下载带 ``v`` 前缀的 release.
           "@
-
-          # 先把已有的 latest release 和 tag 都删掉, 干干净净重建
           Write-Host "Cleanup old 'latest' release/tag (if any)..."
           gh release delete latest --yes --cleanup-tag 2>$null
-          # 兜底: 即使 release 不存在, tag 可能存在, 单独删
           gh api -X DELETE "repos/${{ github.repository }}/git/refs/tags/latest" 2>$null
-
           Write-Host "Creating new 'latest' release at ${{ github.sha }}..."
           gh release create latest build/bin/WinPHP.exe `
             --title "Latest Build" `
             --notes $body `
             --target ${{ github.sha }} `
             --prerelease
-
-          Write-Host "Done. Check https://github.com/${{ github.repository }}/releases/tag/latest"
 
       - name: List all releases (debug)
         if: always() && github.event_name == 'push'
