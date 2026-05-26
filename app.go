@@ -217,6 +217,7 @@ func (a *App) ListVersions(kind string) ([]sources.VersionEntry, error) {
 }
 
 // InstallComponent 下载并安装组件 (按 sources.json 里的 urls 顺序尝试, 全失败才报错).
+// 如果该版本是自定义且只有 LocalZip 字段, 则跳过下载直接用本地 zip.
 func (a *App) InstallComponent(kind, version string) error {
 	src, err := sources.Load()
 	if err != nil {
@@ -226,6 +227,12 @@ func (a *App) InstallComponent(kind, version string) error {
 	if entry == nil {
 		return fmt.Errorf("未找到 %s %s 的下载源", kind, version)
 	}
+
+	// 本地 zip 安装 (自定义版本可能直接指定本地文件, 无需下载)
+	if entry.LocalZip != "" && len(entry.AllURLs()) == 0 {
+		return a.installFromZip(kind, version, entry.LocalZip, entry.RootInZip)
+	}
+
 	urls := entry.AllURLs()
 	if len(urls) == 0 {
 		return fmt.Errorf("%s %s 没有配置任何下载 URL", kind, version)
@@ -264,6 +271,13 @@ func (a *App) InstallComponent(kind, version string) error {
 	}
 	_ = os.Remove(tmpZip)
 
+	// 安装后必须验证关键二进制存在 (符合"什么样的 zip 算合格"的条件)
+	if missing := sources.VerifyInstall(kind, dest); len(missing) > 0 {
+		msg := fmt.Sprintf("%s 安装后验证失败, 缺少关键文件: %v\n请确认 rootInZip 设置正确, 或 zip 文件结构与官方版本一致", kind, missing)
+		wruntime.EventsEmit(a.ctx, "install:done", map[string]any{"kind": kind, "version": version, "error": msg})
+		return fmt.Errorf(msg)
+	}
+
 	a.initConfigFor(kind)
 
 	st := state.Load()
@@ -284,6 +298,167 @@ func (a *App) InstallComponent(kind, version string) error {
 	logger.Info("%s %s 安装完成", kind, version)
 	wruntime.EventsEmit(a.ctx, "install:done", map[string]any{"kind": kind, "version": version, "success": true})
 	return nil
+}
+
+// ============ 自定义版本 ============
+
+// ExpectedBinaries 返回该组件安装后需要存在的关键文件 (相对安装目录).
+// 前端可在自定义版本对话框里展示给用户看, 让他知道 zip 必须含哪些文件.
+func (a *App) ExpectedBinaries(kind string) []string {
+	return sources.ExpectedBinaries(kind)
+}
+
+// AddCustomVersion 添加用户自定义版本 (URL 模式).
+// 写入 config/custom_sources.json. 同 version 会覆盖.
+func (a *App) AddCustomVersion(kind, version string, urls []string, rootInZip string) error {
+	if version == "" {
+		return fmt.Errorf("版本号不能为空")
+	}
+	if !isValidKind(kind) {
+		return fmt.Errorf("不支持的组件: %s", kind)
+	}
+	if len(urls) == 0 {
+		return fmt.Errorf("至少需要一个下载 URL")
+	}
+	cleanUrls := make([]string, 0, len(urls))
+	for _, u := range urls {
+		u = strings.TrimSpace(u)
+		if u == "" {
+			continue
+		}
+		if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+			return fmt.Errorf("URL 必须以 http:// 或 https:// 开头: %s", u)
+		}
+		cleanUrls = append(cleanUrls, u)
+	}
+	if len(cleanUrls) == 0 {
+		return fmt.Errorf("没有有效的 URL")
+	}
+
+	custom, _ := sources.LoadCustom()
+	if custom == nil {
+		custom = &sources.Custom{}
+	}
+	custom.Upsert(kind, sources.VersionEntry{
+		Version:   version,
+		URLs:      cleanUrls,
+		RootInZip: rootInZip,
+	})
+	if err := sources.SaveCustom(custom); err != nil {
+		return err
+	}
+	logger.Info("自定义 %s 版本已添加: %s (%d 个 URL)", kind, version, len(cleanUrls))
+	return nil
+}
+
+// AddCustomVersionLocal 添加用户自定义版本 (本地 zip 模式).
+// 不立即安装, 只把记录保存. 在版本列表里能选到, 选了之后点"开始安装"才执行.
+func (a *App) AddCustomVersionLocal(kind, version, zipPath, rootInZip string) error {
+	if version == "" {
+		return fmt.Errorf("版本号不能为空")
+	}
+	if !isValidKind(kind) {
+		return fmt.Errorf("不支持的组件: %s", kind)
+	}
+	if _, err := os.Stat(zipPath); err != nil {
+		return fmt.Errorf("本地文件不存在: %s", zipPath)
+	}
+	if !strings.HasSuffix(strings.ToLower(zipPath), ".zip") {
+		return fmt.Errorf("文件必须是 .zip")
+	}
+
+	custom, _ := sources.LoadCustom()
+	if custom == nil {
+		custom = &sources.Custom{}
+	}
+	custom.Upsert(kind, sources.VersionEntry{
+		Version:   version,
+		LocalZip:  zipPath,
+		RootInZip: rootInZip,
+	})
+	if err := sources.SaveCustom(custom); err != nil {
+		return err
+	}
+	logger.Info("自定义 %s 版本已添加 (本地 zip): %s", kind, version)
+	return nil
+}
+
+// RemoveCustomVersion 删除一个用户自定义版本 (不影响内置版本).
+func (a *App) RemoveCustomVersion(kind, version string) error {
+	custom, _ := sources.LoadCustom()
+	if custom == nil {
+		return nil
+	}
+	if !custom.Remove(kind, version) {
+		return fmt.Errorf("未找到自定义版本: %s %s", kind, version)
+	}
+	if err := sources.SaveCustom(custom); err != nil {
+		return err
+	}
+	logger.Info("已删除自定义 %s 版本: %s", kind, version)
+	return nil
+}
+
+// installFromZip 内部: 从本地 zip 安装 (供 InstallComponent 在 LocalZip 时调用).
+func (a *App) installFromZip(kind, version, zipPath, rootInZip string) error {
+	if _, err := os.Stat(zipPath); err != nil {
+		return fmt.Errorf("本地文件不存在: %s", zipPath)
+	}
+	wruntime.EventsEmit(a.ctx, "install:start", map[string]any{"kind": kind, "version": version})
+	logger.Info("从本地 zip 安装 %s %s: %s", kind, version, zipPath)
+
+	dest := destDir(kind)
+	a.stopFor(kind)
+	if err := extract.Zip(zipPath, dest, rootInZip); err != nil {
+		wruntime.EventsEmit(a.ctx, "install:done", map[string]any{"kind": kind, "version": version, "error": err.Error()})
+		return err
+	}
+
+	if missing := sources.VerifyInstall(kind, dest); len(missing) > 0 {
+		msg := fmt.Sprintf("%s 安装后验证失败, 缺少关键文件: %v\n请确认 rootInZip 设置正确 (zip 内的子目录名), 或换一个 zip", kind, missing)
+		wruntime.EventsEmit(a.ctx, "install:done", map[string]any{"kind": kind, "version": version, "error": msg})
+		return fmt.Errorf(msg)
+	}
+
+	a.initConfigFor(kind)
+
+	st := state.Load()
+	switch kind {
+	case "nginx":
+		st.NginxVersion = version
+	case "php":
+		st.PhpVersion = version
+	case "mysql":
+		st.MysqlVersion = version
+		st.MysqlInited = false
+	case "postgresql", "postgres":
+		st.PgVersion = version
+		st.PgInited = false
+	}
+	_ = state.Save(st)
+
+	logger.Info("%s %s (本地 zip) 安装完成", kind, version)
+	wruntime.EventsEmit(a.ctx, "install:done", map[string]any{"kind": kind, "version": version, "success": true})
+	return nil
+}
+
+// PickLocalZip 打开文件选择器, 让用户选本地 zip 文件.
+func (a *App) PickLocalZip() (string, error) {
+	return wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{
+		Title: "选择本地 zip 文件",
+		Filters: []wruntime.FileFilter{
+			{DisplayName: "ZIP 文件 (*.zip)", Pattern: "*.zip"},
+			{DisplayName: "All files", Pattern: "*.*"},
+		},
+	})
+}
+
+func isValidKind(kind string) bool {
+	switch kind {
+	case "nginx", "php", "mysql", "postgresql", "postgres":
+		return true
+	}
+	return false
 }
 
 // PreviewUrls 返回该版本下载会按序尝试的 URL 列表 (供前端展示).

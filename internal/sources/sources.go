@@ -34,9 +34,11 @@ type NssmEntry struct {
 type VersionEntry struct {
 	Version   string   `json:"version"`
 	URLs      []string `json:"urls"`
-	URL       string   `json:"url,omitempty"` // 兼容旧字段
+	URL       string   `json:"url,omitempty"`      // 兼容旧字段
 	RootInZip string   `json:"rootInZip"`
-	VsTag     string   `json:"vs,omitempty"` // PHP: vs16 / vs17 / vc15
+	VsTag     string   `json:"vs,omitempty"`       // PHP: vs16 / vs17 / vc15
+	Custom    bool     `json:"custom,omitempty"`   // 是否用户自定义版本
+	LocalZip  string   `json:"localZip,omitempty"` // 本地 zip 文件路径 (没有 URL 时使用)
 }
 
 // AllURLs 返回该版本所有下载 URL (按顺序尝试).
@@ -91,7 +93,24 @@ func Load() (*Sources, error) {
 	s.Php = upgrade(s.Php)
 	s.Mysql = upgrade(s.Mysql)
 	s.Postgresql = upgrade(s.Postgresql)
+
+	// 合并用户自定义版本 (config/custom_sources.json), 追加到内置版本之后,
+	// 并标记 Custom=true 让前端能区分.
+	if custom, err := LoadCustom(); err == nil && custom != nil {
+		s.Nginx = appendCustom(s.Nginx, custom.Nginx)
+		s.Php = appendCustom(s.Php, custom.Php)
+		s.Mysql = appendCustom(s.Mysql, custom.Mysql)
+		s.Postgresql = appendCustom(s.Postgresql, custom.Postgresql)
+	}
 	return &s, nil
+}
+
+func appendCustom(base, custom []VersionEntry) []VersionEntry {
+	for _, e := range custom {
+		e.Custom = true
+		base = append(base, e)
+	}
+	return base
 }
 
 func (s *Sources) Find(kind, version string) *VersionEntry {
