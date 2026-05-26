@@ -37,7 +37,16 @@ func ensureOpen() {
 		openErr = err
 		return
 	}
+	// 新建文件时写 UTF-8 BOM (EF BB BF), 让旧版 Windows Notepad
+	// 也能正确识别为 UTF-8, 不会按 GBK 读出乱码.
+	isNew := false
+	if info, err := os.Stat(p); err != nil || info.Size() == 0 {
+		isNew = true
+	}
 	logF, openErr = os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if isNew && logF != nil && openErr == nil {
+		_, _ = logF.Write([]byte{0xEF, 0xBB, 0xBF})
+	}
 }
 
 func write(level, msg string) {

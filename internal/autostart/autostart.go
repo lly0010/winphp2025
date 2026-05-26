@@ -12,6 +12,7 @@ import (
 	"github.com/lly0010/winphp2025/internal/paths"
 	"github.com/lly0010/winphp2025/internal/services"
 	"github.com/lly0010/winphp2025/internal/sources"
+	"github.com/lly0010/winphp2025/internal/textenc"
 	"github.com/lly0010/winphp2025/internal/wincmd"
 )
 
@@ -155,5 +156,5 @@ func UnregisterService(name string) error {
 func runNssm(args ...string) (string, error) {
 	cmd := wincmd.Hidden(paths.NssmFile, args...)
 	out, err := cmd.CombinedOutput()
-	return string(out), err
+	return textenc.ToUTF8(out), err
 }

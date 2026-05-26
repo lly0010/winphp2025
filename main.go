@@ -3,6 +3,8 @@ package main
 import (
 	"embed"
 	"log"
+	"os"
+	"path/filepath"
 
 	"github.com/lly0010/winphp2025/internal/paths"
 	"github.com/wailsapp/wails/v2"
@@ -13,6 +15,40 @@ import (
 
 //go:embed all:frontend/dist
 var assets embed.FS
+
+// pickWebviewDataPath 返回一个仅含 ASCII 字符的 WebView2 用户数据目录.
+// Wails 默认会用 %LocalAppData%\<app_name>, 如果 Windows 用户名是中文
+// (例如 C:\Users\张三), WebView2 子进程启动可能失败导致主程序无响应.
+// 这里按优先级试几个 ASCII 路径, 第一个能用的就用.
+func pickWebviewDataPath() string {
+	candidates := []string{}
+	if pd := os.Getenv("ProgramData"); pd != "" {
+		candidates = append(candidates, filepath.Join(pd, "WinPHP", "webview2"))
+	}
+	if la := os.Getenv("LOCALAPPDATA"); la != "" {
+		candidates = append(candidates, filepath.Join(la, "WinPHP", "webview2"))
+	}
+	candidates = append(candidates, `C:\WinPHP-data\webview2`)
+
+	for _, p := range candidates {
+		if !isASCII(p) {
+			continue
+		}
+		if err := os.MkdirAll(p, 0o755); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
+func isASCII(s string) bool {
+	for _, r := range s {
+		if r > 127 {
+			return false
+		}
+	}
+	return true
+}
 
 func main() {
 	// 初始化目录 (bin, www, logs, tmp, config)
@@ -46,7 +82,7 @@ func main() {
 			WindowIsTranslucent:               false,
 			DisableWindowIcon:                 false,
 			DisableFramelessWindowDecorations: false,
-			WebviewUserDataPath:               "",
+			WebviewUserDataPath:               pickWebviewDataPath(),
 			ZoomFactor:                        1.0,
 		},
 	})
@@ -55,3 +91,4 @@ func main() {
 		log.Fatalf("wails run: %v", err)
 	}
 }
+

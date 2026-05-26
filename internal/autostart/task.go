@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lly0010/winphp2025/internal/textenc"
 	"github.com/lly0010/winphp2025/internal/wincmd"
 )
 
@@ -27,7 +28,8 @@ func PanelAutoStartEnabled() bool {
 	if time.Since(panelCacheAt) < panelCacheTTL {
 		return panelCacheVal
 	}
-	out, err := wincmd.Hidden("schtasks", "/Query", "/TN", PanelTaskName).CombinedOutput()
+	rawOut, err := wincmd.Hidden("schtasks", "/Query", "/TN", PanelTaskName).CombinedOutput()
+	out := []byte(textenc.ToUTF8(rawOut))
 	panelCacheVal = err == nil && strings.Contains(string(out), PanelTaskName)
 	panelCacheAt = time.Now()
 	return panelCacheVal
@@ -54,17 +56,19 @@ func EnablePanelAutoStart(exePath string) error {
 	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("schtasks create: %v\n%s", err, out)
+		return fmt.Errorf("schtasks create: %v\n%s", err, textenc.ToUTF8(out))
 	}
 	invalidatePanelCache()
 	return nil
 }
 
 func DisablePanelAutoStart() error {
-	out, err := wincmd.Hidden("schtasks", "/Delete", "/TN", PanelTaskName, "/F").CombinedOutput()
+	rawOut, err := wincmd.Hidden("schtasks", "/Delete", "/TN", PanelTaskName, "/F").CombinedOutput()
+	out := textenc.ToUTF8(rawOut)
 	if err != nil {
-		// 不存在视为成功
-		if strings.Contains(string(out), "cannot find") || strings.Contains(string(out), "does not exist") {
+		// 不存在视为成功 (英文 / 中文输出都判)
+		if strings.Contains(out, "cannot find") || strings.Contains(out, "does not exist") ||
+			strings.Contains(out, "找不到") || strings.Contains(out, "不存在") {
 			invalidatePanelCache()
 			return nil
 		}

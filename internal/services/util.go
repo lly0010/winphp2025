@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"github.com/lly0010/winphp2025/internal/paths"
+	"github.com/lly0010/winphp2025/internal/textenc"
 )
 
 // runHidden 执行命令, 隐藏窗口, 合并 stdout+stderr, 超时杀掉.
+// 子进程在中文 Windows 上写 stderr 用 GBK codepage, textenc.ToUTF8 自动检测转码.
 func runHidden(name string, timeout time.Duration, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -22,7 +24,7 @@ func runHidden(name string, timeout time.Duration, args ...string) (string, erro
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
 	err := cmd.Run()
-	return buf.String(), err
+	return textenc.ToUTF8(buf.Bytes()), err
 }
 
 // killByPathPrefix 杀掉 image path 以 prefix 开头的进程.

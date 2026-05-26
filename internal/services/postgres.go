@@ -12,6 +12,7 @@ import (
 	"github.com/lly0010/winphp2025/internal/paths"
 	"github.com/lly0010/winphp2025/internal/proc"
 	"github.com/lly0010/winphp2025/internal/state"
+	"github.com/lly0010/winphp2025/internal/textenc"
 )
 
 const PostgresServiceName = "WinPHPPostgreSQL"
@@ -123,7 +124,7 @@ func (p Postgres) Start() error {
 	hideWindow(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("pg_ctl start: %v\n%s", err, out)
+		return fmt.Errorf("pg_ctl start: %v\n%s", err, textenc.ToUTF8(out))
 	}
 	time.Sleep(500 * time.Millisecond)
 	logger.Info("PostgreSQL 启动")

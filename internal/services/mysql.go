@@ -13,6 +13,7 @@ import (
 	"github.com/lly0010/winphp2025/internal/paths"
 	"github.com/lly0010/winphp2025/internal/proc"
 	"github.com/lly0010/winphp2025/internal/state"
+	"github.com/lly0010/winphp2025/internal/textenc"
 )
 
 const MysqlServiceName = "WinPHPMySQL"
@@ -195,7 +196,7 @@ func (m MySQL) SetRootPassword(newPwd string) error {
 	hideWindow(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("修改失败: %v\n%s", err, out)
+		return fmt.Errorf("修改失败: %v\n%s", err, textenc.ToUTF8(out))
 	}
 	return nil
 }
@@ -223,7 +224,7 @@ func (m MySQL) CreateDatabase(name, rootPwd string) error {
 	hideWindow(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("CREATE DATABASE 失败: %v\n%s", err, out)
+		return fmt.Errorf("CREATE DATABASE 失败: %v\n%s", err, textenc.ToUTF8(out))
 	}
 	return nil
 }
