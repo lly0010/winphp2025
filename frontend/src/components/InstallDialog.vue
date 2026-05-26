@@ -21,6 +21,13 @@
           <div class="prog-text">{{ progressText }}</div>
         </div>
 
+        <div v-else style="margin-top: 14px; color: var(--text-secondary); font-size: 12px;">
+          下载来源 (按优先级):
+          <ul style="margin: 6px 0 0; padding-left: 18px;">
+            <li v-for="u in selectedUrls" :key="u" style="word-break: break-all;">{{ u }}</li>
+          </ul>
+        </div>
+
         <div v-if="error" class="error">{{ error }}</div>
       </div>
       <div class="modal-footer">
@@ -34,7 +41,7 @@
 </template>
 
 <script setup>
-import { inject, ref, onMounted, onUnmounted } from 'vue'
+import { inject, ref, computed, onMounted, onUnmounted } from 'vue'
 const props = defineProps({ kind: String })
 const emit = defineEmits(['close'])
 const api = inject('api')
@@ -63,12 +70,18 @@ onMounted(async () => {
 })
 onUnmounted(() => { if (off) off() })
 
-const progressText = () => {
+// 注: 必须用 computed (不能用普通函数), 否则模板 {{ progressText }} 会渲染函数源码
+const progressText = computed(() => {
   if (total.value > 0) {
     return (loaded.value / 1024 / 1024).toFixed(1) + ' / ' + (total.value / 1024 / 1024).toFixed(1) + ' MB  (' + percent.value + '%)'
   }
   return (loaded.value / 1024 / 1024).toFixed(1) + ' MB ...'
-}
+})
+
+const selectedUrls = computed(() => {
+  const v = versions.value.find(x => x.version === selected.value)
+  return v ? (v.urls || (v.url ? [v.url] : [])) : []
+})
 
 async function start() {
   downloading.value = true

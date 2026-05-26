@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/lly0010/winphp2025/internal/download"
@@ -13,6 +12,7 @@ import (
 	"github.com/lly0010/winphp2025/internal/paths"
 	"github.com/lly0010/winphp2025/internal/services"
 	"github.com/lly0010/winphp2025/internal/sources"
+	"github.com/lly0010/winphp2025/internal/wincmd"
 )
 
 const PanelTaskName = "WinPHPPanelAutoStart"
@@ -110,7 +110,7 @@ func RegisterService(name, exePath string, args []string, workDir, description s
 	// 已存在则先移除
 	if services.ServiceExists(name) {
 		_ = services.StopService(name)
-		_ = exec.Command(paths.NssmFile, "remove", name, "confirm").Run()
+		_ = wincmd.Hidden(paths.NssmFile, "remove", name, "confirm").Run()
 	}
 	// install
 	installArgs := append([]string{"install", name, exePath}, args...)
@@ -146,15 +146,15 @@ func UnregisterService(name string) error {
 		_, _ = runNssm("stop", name)
 		_, _ = runNssm("remove", name, "confirm")
 	} else {
-		_ = exec.Command("sc", "stop", name).Run()
-		_ = exec.Command("sc", "delete", name).Run()
+		_ = wincmd.Hidden("sc", "stop", name).Run()
+		_ = wincmd.Hidden("sc", "delete", name).Run()
 	}
 	logger.Info("服务 %s 已卸载", name)
 	return nil
 }
 
 func runNssm(args ...string) (string, error) {
-	cmd := exec.Command(paths.NssmFile, args...)
+	cmd := wincmd.Hidden(paths.NssmFile, args...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
