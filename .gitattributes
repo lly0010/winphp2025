@@ -1,12 +1,17 @@
-# Preserve binary-exact content (including BOM) for these files.
-# Without this, autocrlf can rewrite line endings on Windows checkout,
-# but more importantly some hosts may strip BOM on text normalization.
-*.ps1   binary
+* text=auto eol=lf
+
 *.bat   text eol=crlf
 *.cmd   text eol=crlf
-*.conf  text eol=lf
-*.ini   text eol=lf
+
+*.go    text eol=lf
+*.vue   text eol=lf
+*.js    text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
 *.json  text eol=lf
 *.md    text eol=lf
-*.html  text eol=lf
-*.php   text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+
+# Legacy PS files: 已 BOM, 不要 git 改动
+legacy/**/*.ps1   binary

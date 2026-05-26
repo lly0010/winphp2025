@@ -1,13 +1,36 @@
-bin/
+# Wails build output
+build/bin/
+build/darwin/
+build/linux/
+build/windows/icon.ico
+
+# Frontend
+frontend/dist/*
+!frontend/dist/.gitkeep
+frontend/node_modules/
+frontend/wailsjs/
+
+# Go
+*.exe
+*.test
+*.prof
+
+# Panel runtime data (用户运行时生成)
+bin/nginx/
+bin/php/
+bin/mysql/
+bin/postgresql/
+bin/nssm.exe
 tmp/
 logs/
 config/state.json
 config/sites.json
 www/*
 !www/default/
-www/default/uploads/
-*.log
-*.zip
-*.tmp
+
+# Editors
+.vscode/
+.idea/
+*.swp
 Thumbs.db
 .DS_Store
