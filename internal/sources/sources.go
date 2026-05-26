@@ -27,16 +27,64 @@ type Sources struct {
 type NssmEntry struct {
 	Version  string   `json:"version"`
 	URL      string   `json:"url"`
-	Mirrors  []string `json:"mirrors,omitempty"`
+	URLs     []string `json:"urls,omitempty"`
+	CnURLs   []string `json:"cn_urls,omitempty"`
+	Mirrors  []string `json:"mirrors,omitempty"` // legacy
 	ExeInZip string   `json:"exeInZip"`
 }
 
 type VersionEntry struct {
 	Version   string   `json:"version"`
 	URLs      []string `json:"urls"`
+	CnURLs    []string `json:"cn_urls,omitempty"`
 	URL       string   `json:"url,omitempty"` // 兼容旧字段
 	RootInZip string   `json:"rootInZip"`
 	VsTag     string   `json:"vs,omitempty"` // PHP: vs16 / vs17 / vc15
+}
+
+// MergedURLs 按用户偏好返回 URL 列表 (从前往后尝试).
+//   pref = "cn"        中国镜像优先, 失败回退海外
+//   pref = "oversea"   海外官方优先, 失败回退中国
+//   pref = "cn-only"   只用中国镜像
+//   pref = "oversea-only" 只用海外官方
+//   其他              等同 "cn" (默认中国优先, 国内用户多)
+func (e *VersionEntry) MergedURLs(pref string) []string {
+	cn := append([]string(nil), e.CnURLs...)
+	os := append([]string(nil), e.URLs...)
+	if len(os) == 0 && e.URL != "" {
+		os = []string{e.URL}
+	}
+	switch pref {
+	case "oversea":
+		return append(os, cn...)
+	case "cn-only":
+		return cn
+	case "oversea-only":
+		return os
+	default: // "cn" or 空
+		return append(cn, os...)
+	}
+}
+
+// MergedURLs for NSSM
+func (n *NssmEntry) MergedURLs(pref string) []string {
+	cn := append([]string(nil), n.CnURLs...)
+	os := append([]string(nil), n.URLs...)
+	if len(os) == 0 && n.URL != "" {
+		os = []string{n.URL}
+	}
+	// legacy: 把 mirrors 也合到海外
+	os = append(os, n.Mirrors...)
+	switch pref {
+	case "oversea":
+		return append(os, cn...)
+	case "cn-only":
+		return cn
+	case "oversea-only":
+		return os
+	default:
+		return append(cn, os...)
+	}
 }
 
 // Load 优先读 config/sources.json, 不存在则用内嵌默认.

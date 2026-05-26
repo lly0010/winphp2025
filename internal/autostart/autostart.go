@@ -17,8 +17,8 @@ import (
 
 const PanelTaskName = "WinPHPPanelAutoStart"
 
-// EnsureNssm 确保 nssm.exe 存在; 不存在则下载.
-func EnsureNssm(ctx context.Context, prog download.ProgressFn) (string, error) {
+// EnsureNssm 确保 nssm.exe 存在; 不存在则下载. mirror = "cn" / "oversea" / ...
+func EnsureNssm(ctx context.Context, mirror string, prog download.ProgressFn) (string, error) {
 	if _, err := os.Stat(paths.NssmFile); err == nil {
 		return paths.NssmFile, nil
 	}
@@ -26,8 +26,7 @@ func EnsureNssm(ctx context.Context, prog download.ProgressFn) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	urls := []string{src.Nssm.URL}
-	urls = append(urls, src.Nssm.Mirrors...)
+	urls := src.Nssm.MergedURLs(mirror)
 	if len(urls) == 0 {
 		return "", fmt.Errorf("sources.json 未配置 nssm")
 	}
