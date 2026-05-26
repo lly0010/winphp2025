@@ -1,0 +1,124 @@
+{
+  "_comment": "各组件下载源 (官方). 每个版本支持多个 URLs, 下载时按序尝试. 用户可以编辑 config/sources.json 添加自己的源.",
+  "nssm": {
+    "version": "2.24",
+    "url": "https://nssm.cc/release/nssm-2.24.zip",
+    "exeInZip": "nssm-2.24/win64/nssm.exe"
+  },
+  "nginx": [
+    {
+      "version": "1.27.3",
+      "urls": ["https://nginx.org/download/nginx-1.27.3.zip"],
+      "rootInZip": "nginx-1.27.3"
+    },
+    {
+      "version": "1.26.2",
+      "urls": ["https://nginx.org/download/nginx-1.26.2.zip"],
+      "rootInZip": "nginx-1.26.2"
+    },
+    {
+      "version": "1.24.0",
+      "urls": ["https://nginx.org/download/nginx-1.24.0.zip"],
+      "rootInZip": "nginx-1.24.0"
+    }
+  ],
+  "php": [
+    {
+      "version": "8.4.2",
+      "vs": "vs17",
+      "urls": [
+        "https://windows.php.net/downloads/releases/php-8.4.2-nts-Win32-vs17-x64.zip",
+        "https://windows.php.net/downloads/releases/archives/php-8.4.2-nts-Win32-vs17-x64.zip"
+      ],
+      "rootInZip": ""
+    },
+    {
+      "version": "8.3.15",
+      "vs": "vs16",
+      "urls": [
+        "https://windows.php.net/downloads/releases/php-8.3.15-nts-Win32-vs16-x64.zip",
+        "https://windows.php.net/downloads/releases/archives/php-8.3.15-nts-Win32-vs16-x64.zip"
+      ],
+      "rootInZip": ""
+    },
+    {
+      "version": "8.3.14",
+      "vs": "vs16",
+      "urls": [
+        "https://windows.php.net/downloads/releases/archives/php-8.3.14-nts-Win32-vs16-x64.zip"
+      ],
+      "rootInZip": ""
+    },
+    {
+      "version": "8.2.27",
+      "vs": "vs16",
+      "urls": [
+        "https://windows.php.net/downloads/releases/php-8.2.27-nts-Win32-vs16-x64.zip",
+        "https://windows.php.net/downloads/releases/archives/php-8.2.27-nts-Win32-vs16-x64.zip"
+      ],
+      "rootInZip": ""
+    },
+    {
+      "version": "8.1.31",
+      "vs": "vs16",
+      "urls": [
+        "https://windows.php.net/downloads/releases/archives/php-8.1.31-nts-Win32-vs16-x64.zip"
+      ],
+      "rootInZip": ""
+    },
+    {
+      "version": "7.4.33",
+      "vs": "vc15",
+      "urls": [
+        "https://windows.php.net/downloads/releases/archives/php-7.4.33-nts-Win32-vc15-x64.zip"
+      ],
+      "rootInZip": ""
+    }
+  ],
+  "mysql": [
+    {
+      "version": "8.0.41",
+      "urls": [
+        "https://dev.mysql.com/get/Downloads/MySQL-8.0/mysql-8.0.41-winx64.zip",
+        "https://downloads.mysql.com/archives/get/p/23/file/mysql-8.0.41-winx64.zip",
+        "https://cdn.mysql.com/Downloads/MySQL-8.0/mysql-8.0.41-winx64.zip"
+      ],
+      "rootInZip": "mysql-8.0.41-winx64"
+    },
+    {
+      "version": "8.0.40",
+      "urls": [
+        "https://downloads.mysql.com/archives/get/p/23/file/mysql-8.0.40-winx64.zip",
+        "https://dev.mysql.com/get/Downloads/MySQL-8.0/mysql-8.0.40-winx64.zip",
+        "https://cdn.mysql.com/Downloads/MySQL-8.0/mysql-8.0.40-winx64.zip"
+      ],
+      "rootInZip": "mysql-8.0.40-winx64"
+    },
+    {
+      "version": "5.7.44",
+      "urls": [
+        "https://downloads.mysql.com/archives/get/p/23/file/mysql-5.7.44-winx64.zip",
+        "https://dev.mysql.com/get/Downloads/MySQL-5.7/mysql-5.7.44-winx64.zip",
+        "https://cdn.mysql.com/Downloads/MySQL-5.7/mysql-5.7.44-winx64.zip"
+      ],
+      "rootInZip": "mysql-5.7.44-winx64"
+    }
+  ],
+  "postgresql": [
+    {
+      "version": "17.2",
+      "urls": ["https://get.enterprisedb.com/postgresql/postgresql-17.2-1-windows-x64-binaries.zip"],
+      "rootInZip": "pgsql"
+    },
+    {
+      "version": "16.6",
+      "urls": ["https://get.enterprisedb.com/postgresql/postgresql-16.6-1-windows-x64-binaries.zip"],
+      "rootInZip": "pgsql"
+    },
+    {
+      "version": "15.10",
+      "urls": ["https://get.enterprisedb.com/postgresql/postgresql-15.10-1-windows-x64-binaries.zip"],
+      "rootInZip": "pgsql"
+    }
+  ]
+}

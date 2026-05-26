@@ -1,0 +1,172 @@
+name: Build WinPHP
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+    branches: ['**']
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: '手动发布: 想用的 tag 名 (留空只构建不发布)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          check-latest: true
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.9.2
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: |
+          if (Test-Path package-lock.json) {
+            npm ci
+          } else {
+            npm install
+          }
+
+      - name: Wails doctor
+        run: wails doctor
+
+      - name: Build (Release)
+        run: wails build -platform windows/amd64 -ldflags "-s -w" -trimpath
+
+      - name: Show artifact
+        id: artifact_info
+        run: |
+          dir build\bin
+          $sz = (Get-Item build\bin\WinPHP.exe).Length / 1MB
+          Write-Host ("Built: WinPHP.exe, size: {0:N1} MB" -f $sz)
+          "size=$([math]::Round($sz,1))" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Upload artifact (always)
+        uses: actions/upload-artifact@v4
+        with:
+          name: WinPHP-windows-amd64-${{ github.sha }}
+          path: build/bin/WinPHP.exe
+          if-no-files-found: error
+
+      # ─── 发布逻辑 (用 gh CLI 直接操作, Windows runner 自带) ───────
+      - name: Debug release context
+        shell: pwsh
+        run: |
+          echo "event_name = ${{ github.event_name }}"
+          echo "ref        = ${{ github.ref }}"
+          echo "ref_name   = ${{ github.ref_name }}"
+          echo "sha        = ${{ github.sha }}"
+          echo "is_tag     = ${{ startsWith(github.ref, 'refs/tags/') }}"
+
+      # 1) push tag v* → 正式版 release (固定 tag, 不删除已有)
+      - name: Release (tag push)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $size = "${{ steps.artifact_info.outputs.size }}"
+          $body = @"
+          **WinPHP $tag** - Windows 一键部署面板 (PHP/MySQL/Nginx/PostgreSQL)
+
+          体积: $size MB . 单文件 EXE . 双击运行需管理员权限
+
+          下载 ``WinPHP.exe``, 放到空目录, 右键 → 以管理员身份运行.
+          "@
+
+          # 如已存在则替换附件; 否则新建
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release $tag already exists, uploading WinPHP.exe (overwrite)..."
+            gh release upload $tag build/bin/WinPHP.exe --clobber
+          } else {
+            Write-Host "Creating new release $tag..."
+            gh release create $tag build/bin/WinPHP.exe `
+              --title $tag `
+              --notes $body `
+              --target ${{ github.sha }} `
+              --latest
+          }
+
+      # 2) 手动 dispatch + 输入 tag → 用该 tag 创建 release
+      - name: Release (manual dispatch with tag)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.event.inputs.release_tag }}"
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag build/bin/WinPHP.exe --clobber
+          } else {
+            gh release create $tag build/bin/WinPHP.exe `
+              --title $tag `
+              --notes "手动发布构建. 提交 ${{ github.sha }}, 分支 ${{ github.ref_name }}" `
+              --target ${{ github.sha }} `
+              --latest
+          }
+
+      # 3) 任何非 tag 的 push → 删除旧的 latest, 重建滚动 latest
+      - name: Release (rolling latest)
+        if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $size = "${{ steps.artifact_info.outputs.size }}"
+          $body = @"
+          **滚动构建 (会被下次 push 覆盖)**
+
+          来源分支: ``${{ github.ref_name }}``
+          提交: ``${{ github.sha }}``
+          体积: $size MB . 单文件 EXE
+
+          开发版本. 稳定版请下载带 ``v`` 前缀的 release.
+          "@
+
+          # 先把已有的 latest release 和 tag 都删掉, 干干净净重建
+          Write-Host "Cleanup old 'latest' release/tag (if any)..."
+          gh release delete latest --yes --cleanup-tag 2>$null
+          # 兜底: 即使 release 不存在, tag 可能存在, 单独删
+          gh api -X DELETE "repos/${{ github.repository }}/git/refs/tags/latest" 2>$null
+
+          Write-Host "Creating new 'latest' release at ${{ github.sha }}..."
+          gh release create latest build/bin/WinPHP.exe `
+            --title "Latest Build" `
+            --notes $body `
+            --target ${{ github.sha }} `
+            --prerelease
+
+          Write-Host "Done. Check https://github.com/${{ github.repository }}/releases/tag/latest"
+
+      - name: List all releases (debug)
+        if: always() && github.event_name == 'push'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          Write-Host "Current releases in repo:"
+          gh release list --limit 10
