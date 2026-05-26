@@ -30,6 +30,11 @@
       <button class="btn danger" :disabled="!status?.binInstalled" @click="$emit('uninstall')">卸载</button>
       <button class="btn" :disabled="!status?.binInstalled" @click="$emit('config')">配置</button>
     </div>
+    <div class="row">
+      <button class="btn custom-btn" @click="$emit('custom')" title="添加自定义版本: 自己的下载 URL 或本地 zip 文件">
+        🛠 自定义版本
+      </button>
+    </div>
     <button class="btn auto-btn" :class="{ active: status?.serviceInstalled }"
             :disabled="!status?.binInstalled" @click="$emit('autostart')">
       {{ status?.serviceInstalled ? '✓ 已设为开机自启 (点击取消)' : '注册为开机自启服务' }}
@@ -40,7 +45,7 @@
 <script setup>
 import { inject, reactive } from 'vue'
 const props = defineProps({ kind: String, label: String, status: Object })
-const emit = defineEmits(['install', 'uninstall', 'config', 'autostart'])
+const emit = defineEmits(['install', 'uninstall', 'config', 'autostart', 'custom'])
 const api = inject('api')
 
 const busy = reactive({ start: false, stop: false, restart: false })
@@ -79,6 +84,12 @@ async function run(action) {
 
 .row { display: flex; gap: 6px; }
 .row .btn { flex: 1; padding: 6px 0; font-size: 13px; }
+
+.custom-btn {
+  background: #fff8e6; border-color: #f5d27a; color: #8a6611;
+  font-size: 12px; padding: 7px 0;
+}
+.custom-btn:hover { background: #fff0c2; border-color: #e0b84a; color: #6b4f0a; }
 
 .auto-btn {
   margin-top: 4px; padding: 8px 0; font-size: 12px;

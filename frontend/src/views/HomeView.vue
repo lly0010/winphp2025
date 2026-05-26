@@ -5,16 +5,16 @@
     <div class="svc-grid">
       <ServiceCard kind="nginx"     label="Nginx"       :status="status.nginx"    @install="openInstall('nginx')"
                    @uninstall="confirmUninstall('nginx')" @config="editConfig('nginx', 'nginx.conf')"
-                   @autostart="toggleAuto('nginx')" />
+                   @autostart="toggleAuto('nginx')" @custom="openCustom('nginx')" />
       <ServiceCard kind="php"       label="PHP-CGI"     :status="status.php"      @install="openInstall('php')"
                    @uninstall="confirmUninstall('php')" @config="editConfig('php', 'php.ini')"
-                   @autostart="toggleAuto('php')" />
+                   @autostart="toggleAuto('php')" @custom="openCustom('php')" />
       <ServiceCard kind="mysql"     label="MySQL"       :status="status.mysql"    @install="openInstall('mysql')"
                    @uninstall="confirmUninstall('mysql')" @config="editConfig('mysql', 'my.ini')"
-                   @autostart="toggleAuto('mysql')" />
+                   @autostart="toggleAuto('mysql')" @custom="openCustom('mysql')" />
       <ServiceCard kind="postgres"  label="PostgreSQL"  :status="status.postgres" @install="openInstall('postgresql')"
                    @uninstall="confirmUninstall('postgres')" @config="editConfig('postgres', 'postgresql.conf')"
-                   @autostart="toggleAuto('postgres')" />
+                   @autostart="toggleAuto('postgres')" @custom="openCustom('postgresql')" />
     </div>
 
     <div class="home-grid">
@@ -60,6 +60,10 @@
     <!-- 安装版本对话框 -->
     <InstallDialog v-if="installKind" :kind="installKind" @close="installKind = null" />
 
+    <!-- 自定义版本对话框 (主界面直接打开, 也可以从 InstallDialog 里打开) -->
+    <CustomVersionDialog v-if="customKind" :kind="customKind"
+                         @close="customKind = null" @saved="onCustomSaved" />
+
     <!-- 新建站点对话框 -->
     <AddSiteDialog v-if="addSiteOpen" :preset-template="addSiteTpl"
                    :php-version="status.php.version" :mysql-running="status.mysql.running"
@@ -74,6 +78,7 @@
 import { inject, ref, onMounted } from 'vue'
 import ServiceCard from '../components/ServiceCard.vue'
 import InstallDialog from '../components/InstallDialog.vue'
+import CustomVersionDialog from '../components/CustomVersionDialog.vue'
 import AddSiteDialog from '../components/AddSiteDialog.vue'
 import ConfigEditor from '../components/ConfigEditor.vue'
 
@@ -82,6 +87,7 @@ const api = inject('api')
 
 const sites = ref([])
 const installKind = ref(null)
+const customKind = ref(null)
 const addSiteOpen = ref(false)
 const addSiteTpl = ref('php')
 const cfgKey = ref(null)
@@ -93,6 +99,13 @@ async function refresh() {
 onMounted(refresh)
 
 function openInstall(kind) { installKind.value = kind }
+function openCustom(kind) { customKind.value = kind }
+function onCustomSaved() {
+  // 保存自定义版本后, 自动打开"安装/切换版本"对话框, 用户能立即选用刚加的版本
+  const k = customKind.value
+  customKind.value = null
+  if (k) installKind.value = k
+}
 
 async function confirmUninstall(kind) {
   let keep = false
