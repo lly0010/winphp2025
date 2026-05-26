@@ -2,11 +2,16 @@ name: Build WinPHP
 
 on:
   push:
-    branches: [main]
+    branches: ['**']
     tags: ['v*']
   pull_request:
-    branches: [main]
+    branches: ['**']
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: '手动发布: 想用的 tag 名 (留空只构建不发布)'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -16,6 +21,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -48,25 +55,79 @@ jobs:
         run: wails build -platform windows/amd64 -ldflags "-s -w" -trimpath
 
       - name: Show artifact
+        id: artifact_info
         run: |
           dir build\bin
           $sz = (Get-Item build\bin\WinPHP.exe).Length / 1MB
           Write-Host ("Built: WinPHP.exe, size: {0:N1} MB" -f $sz)
+          "size=$([math]::Round($sz,1))" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: Upload artifact
+      - name: Upload artifact (always)
         uses: actions/upload-artifact@v4
         with:
-          name: WinPHP-windows-amd64
+          name: WinPHP-windows-amd64-${{ github.sha }}
           path: build/bin/WinPHP.exe
           if-no-files-found: error
 
-      - name: Create release on tag
+      # ─── 发布逻辑 ───────────────────────────────────────────────
+      # 1) push tag v* → 创建正式版 release
+      # 2) push 到默认分支 → 滚动更新 "latest" prerelease
+      # 3) 手动 dispatch 给了 release_tag → 用该 tag 创建 release
+      # 4) PR / 其他分支 → 不发布, 只有 artifact
+
+      - name: Release (tag push)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: build/bin/WinPHP.exe
           name: ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
           generate_release_notes: true
+          prerelease: false
           fail_on_unmatched_files: true
+          body: |
+            **WinPHP ${{ github.ref_name }}** - Windows 一键部署面板 (PHP/MySQL/Nginx/PostgreSQL)
+
+            体积: ${{ steps.artifact_info.outputs.size }} MB · 单文件 EXE · 双击运行需管理员权限
+
+            下载 `WinPHP.exe`, 放空目录, 右键 → 以管理员身份运行.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release (manual dispatch with tag)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/bin/WinPHP.exe
+          tag_name: ${{ github.event.inputs.release_tag }}
+          name: ${{ github.event.inputs.release_tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release (rolling latest)
+        if: |
+          (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/'))
+          && (
+            github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+            || startsWith(github.ref, 'refs/heads/claude/')
+          )
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/bin/WinPHP.exe
+          tag_name: latest
+          name: 'Latest Build (${{ github.ref_name }})'
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          make_latest: false
+          body: |
+            **滚动构建** - 来自分支 `${{ github.ref_name }}` 的最新一次构建.
+
+            提交: ${{ github.sha }}
+            体积: ${{ steps.artifact_info.outputs.size }} MB
+
+            这是开发版本, 可能不稳定. 正式版请看带 `v` 前缀的 release.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
