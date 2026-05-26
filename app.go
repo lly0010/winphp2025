@@ -216,12 +216,8 @@ func (a *App) ListVersions(kind string) ([]sources.VersionEntry, error) {
 	return nil, fmt.Errorf("未知组件: %s", kind)
 }
 
-// InstallComponent 下载并安装组件. mirror 控制 URL 优先级:
-//   "cn"          中国镜像优先 (默认)
-//   "oversea"     海外官方优先
-//   "cn-only"     只用中国镜像
-//   "oversea-only" 只用海外官方
-func (a *App) InstallComponent(kind, version, mirror string) error {
+// InstallComponent 下载并安装组件 (按 sources.json 里的 urls 顺序尝试, 全失败才报错).
+func (a *App) InstallComponent(kind, version string) error {
 	src, err := sources.Load()
 	if err != nil {
 		return err
@@ -230,9 +226,9 @@ func (a *App) InstallComponent(kind, version, mirror string) error {
 	if entry == nil {
 		return fmt.Errorf("未找到 %s %s 的下载源", kind, version)
 	}
-	urls := entry.MergedURLs(mirror)
+	urls := entry.AllURLs()
 	if len(urls) == 0 {
-		return fmt.Errorf("当前镜像偏好下没有可用的下载 URL")
+		return fmt.Errorf("%s %s 没有配置任何下载 URL", kind, version)
 	}
 
 	tmpZip := filepath.Join(paths.TmpDir, fmt.Sprintf("%s-%s.zip", kind, version))
@@ -290,8 +286,8 @@ func (a *App) InstallComponent(kind, version, mirror string) error {
 	return nil
 }
 
-// PreviewUrls 前端在用户选完版本+镜像偏好后, 调它预览实际下载 URL 顺序.
-func (a *App) PreviewUrls(kind, version, mirror string) ([]string, error) {
+// PreviewUrls 返回该版本下载会按序尝试的 URL 列表 (供前端展示).
+func (a *App) PreviewUrls(kind, version string) ([]string, error) {
 	src, err := sources.Load()
 	if err != nil {
 		return nil, err
@@ -300,7 +296,7 @@ func (a *App) PreviewUrls(kind, version, mirror string) ([]string, error) {
 	if entry == nil {
 		return nil, fmt.Errorf("未找到 %s %s", kind, version)
 	}
-	return entry.MergedURLs(mirror), nil
+	return entry.AllURLs(), nil
 }
 
 func (a *App) UninstallComponent(kind string, keepData bool) error {
@@ -467,13 +463,13 @@ func (a *App) PhpSetExtension(name string, enable bool) error {
 
 // ============ 自启 ============
 
-func (a *App) EnsureNssm(mirror string) error {
+func (a *App) EnsureNssm() error {
 	prog := func(d, t int64) {
 		wruntime.EventsEmit(a.ctx, "nssm:progress", map[string]any{"loaded": d, "total": t})
 	}
 	ctx := a.registerCancel("nssm")
 	defer a.clearCancel("nssm")
-	_, err := autostart.EnsureNssm(ctx, mirror, prog)
+	_, err := autostart.EnsureNssm(ctx, prog)
 	if errors.Is(err, context.Canceled) {
 		return fmt.Errorf("已取消")
 	}
@@ -532,7 +528,7 @@ func (a *App) EnableAutoStart(key string) error {
 		}
 		return autostart.EnablePanelAutoStart(exe)
 	}
-	if err := a.EnsureNssm("cn"); err != nil {
+	if err := a.EnsureNssm(); err != nil {
 		return fmt.Errorf("NSSM 安装失败: %w (可在'自启动'页面点'手动指定 nssm.exe'选择本地文件)", err)
 	}
 	switch key {

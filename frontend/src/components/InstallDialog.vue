@@ -14,28 +14,16 @@
           </div>
         </div>
 
-        <div class="form-row">
-          <label>下载源</label>
-          <div class="input-group">
-            <select v-model="mirror" :disabled="downloading">
-              <option value="cn">🇨🇳 中国镜像优先 (推荐, 失败回退海外)</option>
-              <option value="oversea">🌐 海外官方优先 (失败回退中国镜像)</option>
-              <option value="cn-only">🇨🇳 仅中国镜像</option>
-              <option value="oversea-only">🌐 仅海外官方</option>
-            </select>
-          </div>
-        </div>
-
         <!-- 下载前预览 URL 列表 -->
         <div v-if="!downloading" class="url-preview">
           <div class="url-preview-head">
-            候选下载源 (按顺序尝试)
+            候选下载源 (按顺序尝试, 一个失败自动换下一个)
             <a class="toggle" @click="urlOpen = !urlOpen">{{ urlOpen ? '收起 ▴' : '展开 ▾' }}</a>
           </div>
           <ul v-show="urlOpen">
             <li v-for="(u, i) in previewUrls" :key="i">
               <span class="idx">{{ i + 1 }}.</span>
-              <span class="u" :class="{ cn: u.includes('.cn/') || u.includes('aliyun') || u.includes('tuna') || u.includes('huawei') || u.includes('akams') }">{{ u }}</span>
+              <span class="u">{{ u }}</span>
             </li>
             <li v-if="previewUrls.length === 0" class="empty">无可用 URL (检查 sources.json)</li>
           </ul>
@@ -47,9 +35,7 @@
             <div class="bar" :style="{ width: percent + '%' }"></div>
           </div>
           <div class="prog-text">{{ progressText }}</div>
-          <div class="cur-url" v-if="currentUrl">
-            正在: <span :class="{ cn: isCnUrl(currentUrl) }">{{ currentUrl }}</span>
-          </div>
+          <div class="cur-url" v-if="currentUrl">正在: {{ currentUrl }}</div>
         </div>
 
         <div v-if="error" class="error">{{ error }}</div>
@@ -75,7 +61,6 @@ const runtime = inject('runtime')
 const kindLabel = { nginx: 'Nginx', php: 'PHP', mysql: 'MySQL', postgresql: 'PostgreSQL' }[props.kind] || props.kind
 const versions = ref([])
 const selected = ref('')
-const mirror = ref('cn')   // 默认中国镜像优先
 const previewUrls = ref([])
 const urlOpen = ref(false)
 
@@ -111,10 +96,10 @@ onUnmounted(() => {
   if (offLog) offLog()
 })
 
-watch([selected, mirror], refreshPreview)
+watch(selected, refreshPreview)
 async function refreshPreview() {
   if (!selected.value) { previewUrls.value = []; return }
-  try { previewUrls.value = await api.PreviewUrls(props.kind, selected.value, mirror.value) || [] }
+  try { previewUrls.value = await api.PreviewUrls(props.kind, selected.value) || [] }
   catch { previewUrls.value = [] }
 }
 
@@ -125,17 +110,13 @@ const progressText = computed(() => {
   return (loaded.value / 1024 / 1024).toFixed(1) + ' MB ...'
 })
 
-function isCnUrl(u) {
-  return /(\.cn\/|aliyun|tuna|huawei|akams|gh(fast|proxy)|sustech)/i.test(u)
-}
-
 async function start() {
   downloading.value = true
   error.value = ''
   currentUrl.value = ''
   loaded.value = 0; total.value = 0; percent.value = 0
   try {
-    await api.InstallComponent(props.kind, selected.value, mirror.value)
+    await api.InstallComponent(props.kind, selected.value)
     emit('close')
   } catch (e) {
     error.value = '' + e
@@ -154,7 +135,6 @@ async function cancel() {
 .bar { background: var(--primary); height: 100%; transition: width 0.2s; }
 .prog-text { font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
 .cur-url { font-size: 11px; color: var(--text-secondary); margin-top: 4px; word-break: break-all; }
-.cur-url .cn { color: #c0392b; }
 
 .error { color: var(--danger); margin-top: 12px; padding: 8px 10px; background: #fff5f5; border-radius: 4px; font-size: 12px; max-height: 120px; overflow: auto; word-break: break-all; }
 
@@ -173,6 +153,5 @@ async function cancel() {
 .url-preview li { display: flex; gap: 6px; padding: 3px 0; line-height: 1.5; word-break: break-all; }
 .url-preview .idx { color: var(--text-disabled); flex-shrink: 0; }
 .url-preview .u { color: var(--text-secondary); }
-.url-preview .u.cn { color: #c0392b; font-weight: 500; }
 .url-preview .empty { color: var(--danger); }
 </style>
