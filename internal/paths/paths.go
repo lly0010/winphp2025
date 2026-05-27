@@ -14,6 +14,7 @@ var (
 	PhpDir    string // bin/php
 	MysqlDir  string // bin/mysql
 	PgDir     string // bin/postgresql
+	RedisDir  string // bin/redis
 	WwwDir    string // www
 	LogsDir   string // logs
 	TmpDir    string // tmp
@@ -45,6 +46,7 @@ func Init() error {
 	PhpDir = filepath.Join(BinDir, "php")
 	MysqlDir = filepath.Join(BinDir, "mysql")
 	PgDir = filepath.Join(BinDir, "postgresql")
+	RedisDir = filepath.Join(BinDir, "redis")
 	WwwDir = filepath.Join(Root, "www")
 	LogsDir = filepath.Join(Root, "logs")
 	TmpDir = filepath.Join(Root, "tmp")

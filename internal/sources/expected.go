@@ -17,6 +17,8 @@ func ExpectedBinaries(kind string) []string {
 		return []string{"bin/mysqld.exe", "bin/mysql.exe"}
 	case "postgresql", "postgres":
 		return []string{"bin/postgres.exe", "bin/initdb.exe", "bin/pg_ctl.exe"}
+	case "redis":
+		return []string{"redis-server.exe", "redis-cli.exe"}
 	}
 	return nil
 }

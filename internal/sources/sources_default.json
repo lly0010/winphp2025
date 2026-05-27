@@ -120,5 +120,22 @@
       "urls": ["https://get.enterprisedb.com/postgresql/postgresql-15.10-1-windows-x64-binaries.zip"],
       "rootInZip": "pgsql"
     }
+  ],
+  "redis": [
+    {
+      "version": "5.0.14.1",
+      "urls": ["https://github.com/tporadowski/redis/releases/download/v5.0.14.1/Redis-x64-5.0.14.1.zip"],
+      "rootInZip": ""
+    },
+    {
+      "version": "5.0.10",
+      "urls": ["https://github.com/tporadowski/redis/releases/download/v5.0.10/Redis-x64-5.0.10.zip"],
+      "rootInZip": ""
+    },
+    {
+      "version": "3.2.100",
+      "urls": ["https://github.com/microsoftarchive/redis/releases/download/win-3.2.100/Redis-x64-3.2.100.zip"],
+      "rootInZip": ""
+    }
   ]
 }

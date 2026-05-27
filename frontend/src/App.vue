@@ -27,7 +27,7 @@
     </aside>
 
     <main class="content">
-      <HomeView v-if="view === 'home'" :status="status" />
+      <HomeView v-if="view === 'home'" :status="status" @goto="(k) => view = k" />
       <SitesView v-if="view === 'sites'" />
       <DatabaseView v-if="view === 'database'" :status="status" />
       <ExtensionsView v-if="view === 'extensions'" :status="status" />
@@ -69,6 +69,7 @@ const status = reactive({
   php: { running: false, version: '', port: 9000 },
   mysql: { running: false, version: '', port: 3306 },
   postgres: { running: false, version: '', port: 5432 },
+  redis: { running: false, version: '', port: 6379 },
   isAdmin: false,
   panelAutoStart: false
 })

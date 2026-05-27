@@ -56,8 +56,22 @@
         </div>
 
         <div class="form-row">
+          <label>伪静态</label>
+          <div class="input-group">
+            <select v-model="rewrite">
+              <option value="default">默认 PHP 框架 (Laravel / WordPress / Yii / 通用)</option>
+              <option value="thinkphp">ThinkPHP (含 PATH_INFO 重写)</option>
+              <option value="discuz">Discuz!</option>
+              <option value="ecshop">ECShop</option>
+              <option value="none">无 (只匹配静态文件, 不走 index.php)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
           <label></label>
           <div class="input-group" style="flex-direction: column; align-items: flex-start; gap: 6px;">
+            <label class="cb"><input type="checkbox" v-model="cors" /> 启用 CORS 跨域 (Allow-Origin / Methods / Headers + OPTIONS 预检)</label>
             <label class="cb"><input type="checkbox" v-model="addHosts" /> 自动写入 hosts 文件 (需管理员)</label>
             <label class="cb"><input type="checkbox" v-model="reload" /> 创建后立即 nginx reload</label>
           </div>
@@ -88,6 +102,8 @@ const root = ref('')
 const template = ref(props.presetTemplate)
 const createDb = ref(props.presetTemplate === 'wordpress')
 const dbPwd = ref('')
+const rewrite = ref('default')
+const cors = ref(false)
 const addHosts = ref(true)
 const reload = ref(true)
 const submitting = ref(false)
@@ -124,6 +140,8 @@ async function submit() {
       root: root.value,
       port: Number(port.value) || 80,
       template: template.value,
+      rewrite: rewrite.value,
+      cors: cors.value,
       addHosts: addHosts.value
     })
     if (createDb.value) {

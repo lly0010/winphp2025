@@ -21,6 +21,7 @@ type Sources struct {
 	Php        []VersionEntry          `json:"php"`
 	Mysql      []VersionEntry          `json:"mysql"`
 	Postgresql []VersionEntry          `json:"postgresql"`
+	Redis      []VersionEntry          `json:"redis"`
 	raw        map[string]interface{} `json:"-"`
 }
 
@@ -93,6 +94,7 @@ func Load() (*Sources, error) {
 	s.Php = upgrade(s.Php)
 	s.Mysql = upgrade(s.Mysql)
 	s.Postgresql = upgrade(s.Postgresql)
+	s.Redis = upgrade(s.Redis)
 
 	// 合并用户自定义版本 (config/custom_sources.json), 追加到内置版本之后,
 	// 并标记 Custom=true 让前端能区分.
@@ -101,6 +103,7 @@ func Load() (*Sources, error) {
 		s.Php = appendCustom(s.Php, custom.Php)
 		s.Mysql = appendCustom(s.Mysql, custom.Mysql)
 		s.Postgresql = appendCustom(s.Postgresql, custom.Postgresql)
+		s.Redis = appendCustom(s.Redis, custom.Redis)
 	}
 	return &s, nil
 }
@@ -124,6 +127,8 @@ func (s *Sources) Find(kind, version string) *VersionEntry {
 		list = s.Mysql
 	case "postgresql":
 		list = s.Postgresql
+	case "redis":
+		list = s.Redis
 	}
 	for i := range list {
 		if list[i].Version == version {

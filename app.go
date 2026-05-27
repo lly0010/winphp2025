@@ -32,6 +32,7 @@ type App struct {
 	php   services.PHP
 	mysql services.MySQL
 	pg    services.Postgres
+	redis services.Redis
 
 	statusStopCh chan struct{}
 
@@ -119,6 +120,7 @@ type AllStatusResult struct {
 	Php            services.Status `json:"php"`
 	Mysql          services.Status `json:"mysql"`
 	Postgres       services.Status `json:"postgres"`
+	Redis          services.Status `json:"redis"`
 	IsAdmin        bool            `json:"isAdmin"`
 	PanelAutoStart bool            `json:"panelAutoStart"`
 }
@@ -129,6 +131,7 @@ func (a *App) AllStatus() AllStatusResult {
 		Php:            a.php.Status(),
 		Mysql:          a.mysql.Status(),
 		Postgres:       a.pg.Status(),
+		Redis:          a.redis.Status(),
 		IsAdmin:        isAdmin(),
 		PanelAutoStart: autostart.PanelAutoStartEnabled(),
 	}
@@ -146,6 +149,8 @@ func (a *App) StartService(name string) error {
 		return a.mysql.Start()
 	case "postgres":
 		return a.pg.Start()
+	case "redis":
+		return a.redis.Start()
 	}
 	return fmt.Errorf("未知服务: %s", name)
 }
@@ -160,6 +165,8 @@ func (a *App) StopService(name string) error {
 		return a.mysql.Stop()
 	case "postgres":
 		return a.pg.Stop()
+	case "redis":
+		return a.redis.Stop()
 	}
 	return fmt.Errorf("未知服务: %s", name)
 }
@@ -174,6 +181,8 @@ func (a *App) RestartService(name string) error {
 		return a.mysql.Restart()
 	case "postgres":
 		return a.pg.Restart()
+	case "redis":
+		return a.redis.Restart()
 	}
 	return fmt.Errorf("未知服务: %s", name)
 }
@@ -183,6 +192,7 @@ func (a *App) StartAll() error {
 	_ = a.php.Start()
 	_ = a.mysql.Start()
 	_ = a.pg.Start()
+	_ = a.redis.Start()
 	return nil
 }
 
@@ -191,6 +201,7 @@ func (a *App) StopAll() error {
 	_ = a.php.Stop()
 	_ = a.mysql.Stop()
 	_ = a.pg.Stop()
+	_ = a.redis.Stop()
 	return nil
 }
 
@@ -212,6 +223,8 @@ func (a *App) ListVersions(kind string) ([]sources.VersionEntry, error) {
 		return src.Mysql, nil
 	case "postgresql", "postgres":
 		return src.Postgresql, nil
+	case "redis":
+		return src.Redis, nil
 	}
 	return nil, fmt.Errorf("未知组件: %s", kind)
 }
@@ -292,6 +305,8 @@ func (a *App) InstallComponent(kind, version string) error {
 	case "postgresql", "postgres":
 		st.PgVersion = version
 		st.PgInited = false
+	case "redis":
+		st.RedisVersion = version
 	}
 	_ = state.Save(st)
 
@@ -434,6 +449,8 @@ func (a *App) installFromZip(kind, version, zipPath, rootInZip string) error {
 	case "postgresql", "postgres":
 		st.PgVersion = version
 		st.PgInited = false
+	case "redis":
+		st.RedisVersion = version
 	}
 	_ = state.Save(st)
 
@@ -455,7 +472,7 @@ func (a *App) PickLocalZip() (string, error) {
 
 func isValidKind(kind string) bool {
 	switch kind {
-	case "nginx", "php", "mysql", "postgresql", "postgres":
+	case "nginx", "php", "mysql", "postgresql", "postgres", "redis":
 		return true
 	}
 	return false
@@ -489,6 +506,9 @@ func (a *App) UninstallComponent(kind string, keepData bool) error {
 	case "postgresql", "postgres":
 		_ = autostart.UnregisterService(services.PostgresServiceName)
 		_ = a.pg.Stop()
+	case "redis":
+		_ = autostart.UnregisterService(services.RedisServiceName)
+		_ = a.redis.Stop()
 	}
 	time.Sleep(800 * time.Millisecond)
 
@@ -521,6 +541,8 @@ func (a *App) UninstallComponent(kind string, keepData bool) error {
 	case "postgresql", "postgres":
 		st.PgVersion = ""
 		st.PgInited = false
+	case "redis":
+		st.RedisVersion = ""
 	}
 	_ = state.Save(st)
 	logger.Info("%s 已卸载", kind)
@@ -537,6 +559,8 @@ func destDir(kind string) string {
 		return paths.MysqlDir
 	case "postgresql", "postgres":
 		return paths.PgDir
+	case "redis":
+		return paths.RedisDir
 	}
 	return ""
 }
@@ -551,6 +575,8 @@ func (a *App) stopFor(kind string) {
 		_ = a.mysql.Stop()
 	case "postgresql", "postgres":
 		_ = a.pg.Stop()
+	case "redis":
+		_ = a.redis.Stop()
 	}
 }
 
@@ -564,6 +590,8 @@ func (a *App) initConfigFor(kind string) {
 		_ = a.mysql.InitConfig()
 	case "postgresql", "postgres":
 		_ = a.pg.InitConfig()
+	case "redis":
+		_ = a.redis.InitConfig()
 	}
 }
 
@@ -612,6 +640,8 @@ func configPath(key string) string {
 		return filepath.Join(paths.MysqlDir, "my.ini")
 	case "postgres", "postgresql":
 		return filepath.Join(paths.PgDir, "data", "postgresql.conf")
+	case "redis":
+		return filepath.Join(paths.RedisDir, "redis.windows.conf")
 	}
 	if strings.HasPrefix(key, "vhost:") {
 		name := strings.TrimPrefix(key, "vhost:")
@@ -692,6 +722,7 @@ func (a *App) AutoStartList() []AutoStartItem {
 		mk("php", "PHP-CGI 服务", services.PhpServiceName, a.php.Status()),
 		mk("mysql", "MySQL 服务", services.MysqlServiceName, a.mysql.Status()),
 		mk("postgres", "PostgreSQL 服务", services.PostgresServiceName, a.pg.Status()),
+		mk("redis", "Redis 服务", services.RedisServiceName, a.redis.Status()),
 	}
 }
 
@@ -724,6 +755,14 @@ func (a *App) EnableAutoStart(key string) error {
 		return autostart.RegisterService(services.PostgresServiceName,
 			a.pg.ExePath(), []string{"-D", a.pg.DataPath()},
 			paths.PgDir, "WinPHP PostgreSQL", nil)
+	case "redis":
+		args := []string{}
+		if _, err := os.Stat(a.redis.ConfPath()); err == nil {
+			args = []string{a.redis.ConfPath()}
+		}
+		return autostart.RegisterService(services.RedisServiceName,
+			a.redis.ExePath(), args,
+			paths.RedisDir, "WinPHP Redis", nil)
 	}
 	return fmt.Errorf("未知: %s", key)
 }
@@ -740,12 +779,14 @@ func (a *App) DisableAutoStart(key string) error {
 		return autostart.UnregisterService(services.MysqlServiceName)
 	case "postgres":
 		return autostart.UnregisterService(services.PostgresServiceName)
+	case "redis":
+		return autostart.UnregisterService(services.RedisServiceName)
 	}
 	return fmt.Errorf("未知: %s", key)
 }
 
 func (a *App) EnableAllAutoStart() error {
-	keys := []string{"panel", "nginx", "php", "mysql", "postgres"}
+	keys := []string{"panel", "nginx", "php", "mysql", "postgres", "redis"}
 	for _, k := range keys {
 		// 跳过未安装的组件
 		if k != "panel" {
@@ -760,7 +801,7 @@ func (a *App) EnableAllAutoStart() error {
 }
 
 func (a *App) DisableAllAutoStart() error {
-	for _, k := range []string{"panel", "nginx", "php", "mysql", "postgres"} {
+	for _, k := range []string{"panel", "nginx", "php", "mysql", "postgres", "redis"} {
 		_ = a.DisableAutoStart(k)
 	}
 	return nil
@@ -776,6 +817,8 @@ func (a *App) statusOf(key string) services.Status {
 		return a.mysql.Status()
 	case "postgres":
 		return a.pg.Status()
+	case "redis":
+		return a.redis.Status()
 	}
 	return services.Status{}
 }

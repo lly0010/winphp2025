@@ -15,6 +15,9 @@
       <ServiceCard kind="postgres"  label="PostgreSQL"  :status="status.postgres" @install="openInstall('postgresql')"
                    @uninstall="confirmUninstall('postgres')" @config="editConfig('postgres', 'postgresql.conf')"
                    @autostart="toggleAuto('postgres')" @custom="openCustom('postgresql')" />
+      <ServiceCard kind="redis"     label="Redis"       :status="status.redis"    @install="openInstall('redis')"
+                   @uninstall="confirmUninstall('redis')" @config="editRedisConfig"
+                   @autostart="toggleAuto('redis')" @custom="openCustom('redis')" />
     </div>
 
     <div class="home-grid">
@@ -25,9 +28,9 @@
           <button class="btn lg col-2" @click="addSite('wordpress')">WordPress 站点</button>
           <button class="btn" @click="api.OpenInBrowser('http://localhost')">浏览 localhost</button>
           <button class="btn" @click="api.OpenInBrowser('http://localhost/phpinfo.php')">phpinfo</button>
+          <button class="btn" @click="$emit('goto', 'extensions')">⚙ PHP 扩展</button>
           <button class="btn" @click="openFolder('www')">www 目录</button>
           <button class="btn" @click="openFolder('logs')">日志目录</button>
-          <button class="btn" @click="openFolder('root')">面板根目录</button>
           <button class="btn" @click="editConfig('hosts', 'hosts')">编辑 hosts</button>
           <button class="btn" @click="api.NginxReload()">Nginx reload</button>
         </div>
@@ -107,6 +110,11 @@ function onCustomSaved() {
   if (k) installKind.value = k
 }
 
+function editRedisConfig() {
+  cfgKey.value = 'redis'
+  cfgTitle.value = 'redis.windows.conf'
+}
+
 async function confirmUninstall(kind) {
   let keep = false
   if (kind === 'mysql' || kind === 'postgres') {
@@ -167,8 +175,9 @@ async function openFolder(key) {
 .page-title { font-size: 20px; font-weight: 600; margin: 0 0 16px; color: var(--text); }
 
 .svc-grid {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px;
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 16px;
 }
+@media (max-width: 1500px) { .svc-grid { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 1100px) { .svc-grid { grid-template-columns: repeat(2, 1fr); } }
 
 .home-grid {

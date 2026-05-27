@@ -13,6 +13,10 @@ import (
 	"github.com/lly0010/winphp2025/internal/state"
 )
 
+// vhost 模板. 占位符:
+//   ##SITE## / ##SERVER_NAME## / ##ROOT## / ##PORT##
+//   ##CORS_BLOCK## - 跨域响应头 (开启时填入, 否则空)
+//   ##REWRITE_BLOCK## - 伪静态规则 (location / { ... }), 不同框架不同
 const defaultVhost = `server {
     listen       ##PORT## ;
     server_name  ##SERVER_NAME## ;
@@ -22,9 +26,8 @@ const defaultVhost = `server {
     access_log   logs/##SITE##.access.log main ;
     error_log    logs/##SITE##.error.log ;
 
-    location / {
-        try_files $uri $uri/ /index.php?$query_string ;
-    }
+##CORS_BLOCK##
+##REWRITE_BLOCK##
 
     location ~ \.php$ {
         fastcgi_pass   127.0.0.1:9000 ;
@@ -37,12 +40,91 @@ const defaultVhost = `server {
 }
 `
 
+// rewriteBlock 按伪静态类型生成 nginx location 块.
+func rewriteBlock(kind string) string {
+	switch kind {
+	case "none":
+		return `    location / {
+        try_files $uri $uri/ =404 ;
+    }`
+	case "thinkphp":
+		return `    # 伪静态: ThinkPHP
+    location / {
+        if (!-e $request_filename) {
+            rewrite ^(.*)$ /index.php?s=$1 last;
+            break;
+        }
+        try_files $uri $uri/ /index.php?$query_string ;
+    }`
+	case "discuz":
+		return `    # 伪静态: Discuz!
+    location / {
+        rewrite ^([^\.]*)/topic-(.+)\.html$ $1/portal.php?mod=topic&topic=$2 last;
+        rewrite ^([^\.]*)/article-([0-9]+)-([0-9]+)\.html$ $1/portal.php?mod=view&aid=$2&page=$3 last;
+        rewrite ^([^\.]*)/forum-(\w+)-([0-9]+)\.html$ $1/forumdisplay.php?fid=$2&page=$3 last;
+        rewrite ^([^\.]*)/thread-([0-9]+)-([0-9]+)-([0-9]+)\.html$ $1/viewthread.php?tid=$2&extra=page%3D$4&page=$3 last;
+        rewrite ^([^\.]*)/group-([0-9]+)-([0-9]+)\.html$ $1/forumdisplay.php?fid=$2&page=$3 last;
+        rewrite ^([^\.]*)/space-(username|uid)-(.+)\.html$ $1/space.php?$2=$3 last;
+        rewrite ^([^\.]*)/blog-([0-9]+)-([0-9]+)\.html$ $1/space.php?uid=$2&do=blog&id=$3 last;
+        rewrite ^([^\.]*)/(fid|tid)-([0-9]+)\.html$ $1/index.php?$2=$3 last;
+        try_files $uri $uri/ /index.php?$query_string ;
+    }`
+	case "ecshop":
+		return `    # 伪静态: ECShop
+    location / {
+        rewrite "^/index.html" /index.php last;
+        rewrite "^/category$" /index.php last;
+        rewrite "^/feed-c([0-9]+).xml$" /feed.php?cat=$1 last;
+        rewrite "^/feed-b([0-9]+).xml$" /feed.php?brand=$1 last;
+        rewrite "^/feed.xml$" /feed.php last;
+        rewrite "^/category-([0-9]+)(.*)$" /category.php?id=$1$2 last;
+        rewrite "^/goods-([0-9]+)(.*)$" /goods.php?id=$1 last;
+        rewrite "^/article_cat-([0-9]+)(.*)$" /article_cat.php?id=$1$2 last;
+        rewrite "^/article-([0-9]+)(.*)$" /article.php?id=$1 last;
+        rewrite "^/brand-([0-9]+)(.*)$" /brand.php?id=$1$2 last;
+        rewrite "^/tag-(.*)$" /search.php?keywords=$1 last;
+        rewrite "^/snatch-([0-9]+)\.html$" /snatch.php?id=$1 last;
+        rewrite "^/group_buy-([0-9]+)\.html$" /group_buy.php?act=view&id=$1 last;
+        rewrite "^/auction-([0-9]+)\.html$" /auction.php?act=view&id=$1 last;
+        rewrite "^/exchange-id([0-9]+)(.*)$" /exchange.php?id=$1$2 last;
+        rewrite "^/exchange-([0-9]+)(.*)$" /exchange.php?cat_id=$1$2 last;
+        try_files $uri $uri/ /index.php?$query_string ;
+    }`
+	}
+	// "default" / 默认 PHP 框架 (Laravel / WordPress / Yii ...)
+	return `    location / {
+        try_files $uri $uri/ /index.php?$query_string ;
+    }`
+}
+
+// corsBlock CORS 响应头.
+func corsBlock(enable bool) string {
+	if !enable {
+		return ""
+	}
+	return `    # CORS 跨域 (由 WinPHP 生成)
+    add_header Access-Control-Allow-Origin  "$http_origin" always;
+    add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH" always;
+    add_header Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept, Origin" always;
+    add_header Access-Control-Allow-Credentials "true" always;
+    add_header Access-Control-Max-Age "86400" always;
+    if ($request_method = OPTIONS) {
+        add_header Access-Control-Allow-Origin  "$http_origin";
+        add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH";
+        add_header Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept, Origin";
+        add_header Access-Control-Max-Age "86400";
+        return 204;
+    }`
+}
+
 type AddSiteInput struct {
 	Name       string `json:"name"`
 	ServerName string `json:"serverName"`
 	Root       string `json:"root"`
 	Port       int    `json:"port"`
 	Template   string `json:"template"` // "php" / "laravel" / "wordpress" / "static"
+	Rewrite    string `json:"rewrite"`  // "default" / "thinkphp" / "discuz" / "ecshop" / "none"
+	CORS       bool   `json:"cors"`     // 是否启用 CORS 响应头
 	AddHosts   bool   `json:"addHosts"`
 }
 
@@ -97,11 +179,22 @@ func Add(in AddSiteInput) error {
 	if err := os.MkdirAll(vhostDir, 0o755); err != nil {
 		return err
 	}
+	// 静态站点强制 none 伪静态
+	rewriteKind := in.Rewrite
+	if rewriteKind == "" {
+		rewriteKind = "default"
+	}
+	if in.Template == "static" {
+		rewriteKind = "none"
+	}
+
 	vhost := strings.NewReplacer(
 		"##SITE##", in.Name,
 		"##SERVER_NAME##", in.ServerName,
 		"##ROOT##", filepath.ToSlash(vhostRoot),
 		"##PORT##", fmt.Sprintf("%d", in.Port),
+		"##CORS_BLOCK##", corsBlock(in.CORS),
+		"##REWRITE_BLOCK##", rewriteBlock(rewriteKind),
 	).Replace(defaultVhost)
 	if err := os.WriteFile(filepath.Join(vhostDir, in.Name+".conf"), []byte(vhost), 0o644); err != nil {
 		return err
@@ -122,6 +215,8 @@ func Add(in AddSiteInput) error {
 		Root:       vhostRoot,
 		Port:       in.Port,
 		Template:   in.Template,
+		Rewrite:    rewriteKind,
+		CORS:       in.CORS,
 		CreatedAt:  time.Now().Format("2006-01-02 15:04:05"),
 	})
 	if err := state.SaveSites(out); err != nil {

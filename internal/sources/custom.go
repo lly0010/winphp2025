@@ -16,6 +16,7 @@ type Custom struct {
 	Php        []VersionEntry `json:"php"`
 	Mysql      []VersionEntry `json:"mysql"`
 	Postgresql []VersionEntry `json:"postgresql"`
+	Redis      []VersionEntry `json:"redis"`
 }
 
 func customPath() string {
@@ -58,6 +59,8 @@ func (c *Custom) Get(kind string) []VersionEntry {
 		return c.Mysql
 	case "postgresql", "postgres":
 		return c.Postgresql
+	case "redis":
+		return c.Redis
 	}
 	return nil
 }
@@ -72,6 +75,8 @@ func (c *Custom) Set(kind string, v []VersionEntry) {
 		c.Mysql = v
 	case "postgresql", "postgres":
 		c.Postgresql = v
+	case "redis":
+		c.Redis = v
 	}
 }
 

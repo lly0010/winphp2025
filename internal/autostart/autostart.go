@@ -16,7 +16,10 @@ import (
 	"github.com/lly0010/winphp2025/internal/wincmd"
 )
 
-const PanelTaskName = "WinPHPPanelAutoStart"
+const (
+	PanelTaskName    = "WinPHPPanelAutoStart"
+	RedisServiceName = "WinPHPRedis"
+)
 
 // EnsureNssm 确保 nssm.exe 存在; 不存在则下载.
 func EnsureNssm(ctx context.Context, prog download.ProgressFn) (string, error) {
@@ -136,6 +139,23 @@ func RegisterService(name, exePath string, args []string, workDir, description s
 	}
 	logger.Info("服务 %s 已注册 (开机自启)", name)
 	return nil
+}
+
+// InstallRedisService 注册 Redis 为 Windows 服务
+func InstallRedisService() error {
+	if _, err := os.Stat(paths.NssmFile); err != nil {
+		return fmt.Errorf("nssm.exe 不存在, 请先 EnsureNssm")
+	}
+	exe := filepath.Join(paths.RedisDir, "redis-server.exe")
+	if _, err := os.Stat(exe); err != nil {
+		return fmt.Errorf("Redis 未安装")
+	}
+	conf := filepath.Join(paths.RedisDir, "redis.windows.conf")
+	args := []string{}
+	if _, err := os.Stat(conf); err == nil {
+		args = []string{conf}
+	}
+	return RegisterService(RedisServiceName, exe, args, paths.RedisDir, "WinPHP Redis", nil)
 }
 
 func UnregisterService(name string) error {
