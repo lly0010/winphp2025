@@ -11,6 +11,7 @@ import (
 	"github.com/lly0010/winphp2025/internal/logger"
 	"github.com/lly0010/winphp2025/internal/paths"
 	"github.com/lly0010/winphp2025/internal/state"
+	"github.com/lly0010/winphp2025/internal/winshort"
 )
 
 // vhost 模板. 占位符:
@@ -188,10 +189,11 @@ func Add(in AddSiteInput) error {
 		rewriteKind = "none"
 	}
 
+	// 用 Windows 短路径避免中文目录导致 nginx 启动失败
 	vhost := strings.NewReplacer(
 		"##SITE##", in.Name,
 		"##SERVER_NAME##", in.ServerName,
-		"##ROOT##", filepath.ToSlash(vhostRoot),
+		"##ROOT##", filepath.ToSlash(winshort.Short(vhostRoot)),
 		"##PORT##", fmt.Sprintf("%d", in.Port),
 		"##CORS_BLOCK##", corsBlock(in.CORS),
 		"##REWRITE_BLOCK##", rewriteBlock(rewriteKind),

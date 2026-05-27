@@ -15,6 +15,7 @@ import (
 	"github.com/lly0010/winphp2025/internal/extract"
 	"github.com/lly0010/winphp2025/internal/hosts"
 	"github.com/lly0010/winphp2025/internal/logger"
+	"github.com/lly0010/winphp2025/internal/nettest"
 	"github.com/lly0010/winphp2025/internal/paths"
 	"github.com/lly0010/winphp2025/internal/proc"
 	"github.com/lly0010/winphp2025/internal/services"
@@ -476,6 +477,16 @@ func isValidKind(kind string) bool {
 		return true
 	}
 	return false
+}
+
+// TestUrl 探测单个 URL 是否可达 (HEAD / Range 兜底), 不下载内容.
+func (a *App) TestUrl(url string) nettest.Result {
+	return nettest.Test(a.ctx, url)
+}
+
+// TestUrls 并发探测多个 URL (前端 "测试连通性" 按钮调它).
+func (a *App) TestUrls(urls []string) []nettest.Result {
+	return nettest.TestMany(a.ctx, urls)
 }
 
 // PreviewUrls 返回该版本下载会按序尝试的 URL 列表 (供前端展示).

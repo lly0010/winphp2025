@@ -11,6 +11,7 @@ import (
 	"github.com/lly0010/winphp2025/internal/logger"
 	"github.com/lly0010/winphp2025/internal/paths"
 	"github.com/lly0010/winphp2025/internal/proc"
+	"github.com/lly0010/winphp2025/internal/winshort"
 )
 
 const NginxServiceName = "WinPHPNginx"
@@ -81,7 +82,7 @@ func (n Nginx) Start() error {
 		return fmt.Errorf("Nginx 已在运行")
 	}
 	// 配置语法测试
-	if out, err := runHidden(exe, 5*time.Second, "-t", "-p", paths.NginxDir); err != nil {
+	if out, err := runHidden(exe, 5*time.Second, "-t", "-p", winshort.Short(paths.NginxDir)); err != nil {
 		return fmt.Errorf("nginx -t 失败: %v\n%s", err, out)
 	}
 
@@ -90,8 +91,10 @@ func (n Nginx) Start() error {
 			return fmt.Errorf("service start: %w", err)
 		}
 	} else {
-		cmd := exec.Command(exe, "-p", paths.NginxDir)
-		cmd.Dir = paths.NginxDir
+		// 用短路径解决中文目录启动失败 (nginx fopen 在 ANSI codepage 下不支持 unicode)
+		nginxShort := winshort.Short(paths.NginxDir)
+		cmd := exec.Command(exe, "-p", nginxShort)
+		cmd.Dir = nginxShort
 		hideWindow(cmd)
 		if err := cmd.Start(); err != nil {
 			return err
@@ -109,7 +112,7 @@ func (n Nginx) Stop() error {
 	}
 	exe := n.ExePath()
 	if _, err := os.Stat(exe); err == nil && proc.HasProcessByPathPrefix("nginx", paths.NginxDir) {
-		_, _ = runHidden(exe, 5*time.Second, "-s", "stop", "-p", paths.NginxDir)
+		_, _ = runHidden(exe, 5*time.Second, "-s", "stop", "-p", winshort.Short(paths.NginxDir))
 	}
 	time.Sleep(400 * time.Millisecond)
 	// 强杀残留
@@ -129,13 +132,13 @@ func (n Nginx) Reload() error {
 	if _, err := os.Stat(exe); err != nil {
 		return fmt.Errorf("Nginx 未安装")
 	}
-	if out, err := runHidden(exe, 5*time.Second, "-t", "-p", paths.NginxDir); err != nil {
+	if out, err := runHidden(exe, 5*time.Second, "-t", "-p", winshort.Short(paths.NginxDir)); err != nil {
 		return fmt.Errorf("nginx -t: %v\n%s", err, out)
 	}
 	if !proc.HasProcessByPathPrefix("nginx", paths.NginxDir) {
 		return fmt.Errorf("Nginx 未运行")
 	}
-	_, _ = runHidden(exe, 5*time.Second, "-s", "reload", "-p", paths.NginxDir)
+	_, _ = runHidden(exe, 5*time.Second, "-s", "reload", "-p", winshort.Short(paths.NginxDir))
 	logger.Info("Nginx 已 reload")
 	return nil
 }
@@ -153,7 +156,9 @@ func (Nginx) InitConfig() error {
 		return err
 	}
 	tpl, _ := readTemplate("nginx.conf", defaultNginxConf)
-	conf := strings.ReplaceAll(tpl, "##WWW_ROOT##", filepath.ToSlash(paths.WwwDir))
+	// 用短路径避免中文 root 启动失败
+	wwwShort := filepath.ToSlash(winshort.Short(paths.WwwDir))
+	conf := strings.ReplaceAll(tpl, "##WWW_ROOT##", wwwShort)
 	if err := os.WriteFile(filepath.Join(confDir, "nginx.conf"), []byte(conf), 0o644); err != nil {
 		return err
 	}

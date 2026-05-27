@@ -23,7 +23,13 @@
           <div class="url-preview-head">
             <span v-if="isLocal">本地 zip 文件 (无需下载)</span>
             <span v-else>候选下载源 (按顺序尝试)</span>
-            <a v-if="!isLocal" class="toggle" @click="urlOpen = !urlOpen">{{ urlOpen ? '收起 ▴' : '展开 ▾' }}</a>
+            <span class="head-right">
+              <a v-if="!isLocal && previewUrls.length > 0" class="toggle test"
+                 @click="testConnectivity" :class="{ busy: testing }">
+                {{ testing ? '测试中...' : '🌐 测试连通性' }}
+              </a>
+              <a v-if="!isLocal" class="toggle" @click="urlOpen = !urlOpen">{{ urlOpen ? '收起 ▴' : '展开 ▾' }}</a>
+            </span>
           </div>
           <ul v-if="isLocal" class="single">
             <li><code>{{ selectedEntry.localZip }}</code></li>
@@ -32,6 +38,10 @@
             <li v-for="(u, i) in previewUrls" :key="i">
               <span class="idx">{{ i + 1 }}.</span>
               <span class="u">{{ u }}</span>
+              <span v-if="testResults[u]" class="test-result" :class="{ ok: testResults[u].ok, fail: !testResults[u].ok }">
+                <template v-if="testResults[u].ok">✓ {{ testResults[u].status }} · {{ testResults[u].elapsedMs }}ms</template>
+                <template v-else>✗ {{ testResults[u].status || '-' }} {{ testResults[u].error || 'unreachable' }}</template>
+              </span>
             </li>
             <li v-if="previewUrls.length === 0" class="empty">无可用 URL (检查 sources.json)</li>
           </ul>
@@ -83,6 +93,8 @@ const total = ref(0)
 const error = ref('')
 const percent = ref(0)
 const currentUrl = ref('')
+const testing = ref(false)
+const testResults = ref({}) // {url: {ok, status, elapsedMs, error}}
 let offProgress, offLog
 
 const selectedEntry = computed(() => versions.value.find(v => v.version === selected.value))
@@ -121,10 +133,29 @@ onUnmounted(() => {
 
 watch(selected, refreshPreview)
 async function refreshPreview() {
+  testResults.value = {} // 换版本就清掉旧测试结果
   if (!selected.value) { previewUrls.value = []; return }
   if (isLocal.value) { previewUrls.value = []; return }
   try { previewUrls.value = await api.PreviewUrls(props.kind, selected.value) || [] }
   catch { previewUrls.value = [] }
+}
+
+async function testConnectivity() {
+  if (testing.value || previewUrls.value.length === 0) return
+  testing.value = true
+  urlOpen.value = true
+  // 先全部置 "测试中" 占位 (空对象表示 pending, 不显示)
+  testResults.value = {}
+  try {
+    const results = await api.TestUrls(previewUrls.value)
+    const map = {}
+    for (const r of (results || [])) map[r.url] = r
+    testResults.value = map
+  } catch (e) {
+    error.value = '测试失败: ' + e
+  } finally {
+    testing.value = false
+  }
 }
 
 const progressText = computed(() => {
@@ -197,11 +228,20 @@ async function removeCustom() {
 .url-preview .toggle { color: var(--primary); cursor: pointer; font-size: 11px; }
 .url-preview ul { list-style: none; padding: 6px 0 0; margin: 0; }
 .url-preview ul.single { padding: 6px 0 2px; }
-.url-preview li { display: flex; gap: 6px; padding: 3px 0; line-height: 1.5; word-break: break-all; }
+.url-preview li { display: flex; gap: 6px; padding: 3px 0; line-height: 1.5; word-break: break-all; align-items: baseline; }
 .url-preview .idx { color: var(--text-disabled); flex-shrink: 0; }
-.url-preview .u { color: var(--text-secondary); }
+.url-preview .u { color: var(--text-secondary); flex: 1; }
 .url-preview code { color: var(--primary); font-family: Consolas, monospace; }
 .url-preview .empty { color: var(--danger); }
+.url-preview .head-right { display: flex; gap: 12px; align-items: center; }
+.url-preview .toggle.test { color: var(--success); }
+.url-preview .toggle.test.busy { color: var(--text-disabled); pointer-events: none; }
+.url-preview .test-result {
+  flex-shrink: 0; font-size: 11px; padding: 1px 6px; border-radius: 3px;
+  font-family: Consolas, monospace;
+}
+.url-preview .test-result.ok   { color: #2d7a2d; background: rgba(60,170,60,0.08); }
+.url-preview .test-result.fail { color: #c23030; background: rgba(217,74,74,0.08); }
 
 .btn.sm { padding: 4px 10px; font-size: 12px; }
 </style>
