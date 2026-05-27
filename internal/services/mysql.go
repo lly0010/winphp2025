@@ -11,6 +11,7 @@ import (
 
 	"github.com/lly0010/winphp2025/internal/logger"
 	"github.com/lly0010/winphp2025/internal/paths"
+	"github.com/lly0010/winphp2025/internal/portcheck"
 	"github.com/lly0010/winphp2025/internal/proc"
 	"github.com/lly0010/winphp2025/internal/state"
 	"github.com/lly0010/winphp2025/internal/textenc"
@@ -102,7 +103,7 @@ func (m MySQL) Start() error {
 		}
 	}
 	if proc.PortListening(3306) {
-		return fmt.Errorf("端口 3306 已被占用")
+		return fmt.Errorf("端口 3306 已被占用. %s", portcheck.Diagnose(3306).Diagnosis)
 	}
 	if ServiceExists(MysqlServiceName) {
 		return StartService(MysqlServiceName)

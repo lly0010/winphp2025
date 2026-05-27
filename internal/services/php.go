@@ -10,6 +10,7 @@ import (
 
 	"github.com/lly0010/winphp2025/internal/logger"
 	"github.com/lly0010/winphp2025/internal/paths"
+	"github.com/lly0010/winphp2025/internal/portcheck"
 	"github.com/lly0010/winphp2025/internal/proc"
 )
 
@@ -73,7 +74,7 @@ func (p PHP) Start() error {
 		return fmt.Errorf("PHP-CGI 已运行")
 	}
 	if proc.PortListening(9000) {
-		return fmt.Errorf("端口 9000 已被占用")
+		return fmt.Errorf("端口 9000 已被占用. %s", portcheck.Diagnose(9000).Diagnosis)
 	}
 	if ServiceExists(PhpServiceName) {
 		return StartService(PhpServiceName)

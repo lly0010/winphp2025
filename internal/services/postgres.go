@@ -10,6 +10,7 @@ import (
 
 	"github.com/lly0010/winphp2025/internal/logger"
 	"github.com/lly0010/winphp2025/internal/paths"
+	"github.com/lly0010/winphp2025/internal/portcheck"
 	"github.com/lly0010/winphp2025/internal/proc"
 	"github.com/lly0010/winphp2025/internal/state"
 	"github.com/lly0010/winphp2025/internal/textenc"
@@ -111,7 +112,7 @@ func (p Postgres) Start() error {
 		return fmt.Errorf("PostgreSQL 已运行")
 	}
 	if proc.PortListening(5432) {
-		return fmt.Errorf("端口 5432 已被占用")
+		return fmt.Errorf("端口 5432 已被占用. %s", portcheck.Diagnose(5432).Diagnosis)
 	}
 	if err := p.initData(); err != nil {
 		return err

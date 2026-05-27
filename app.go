@@ -17,6 +17,7 @@ import (
 	"github.com/lly0010/winphp2025/internal/logger"
 	"github.com/lly0010/winphp2025/internal/nettest"
 	"github.com/lly0010/winphp2025/internal/paths"
+	"github.com/lly0010/winphp2025/internal/portcheck"
 	"github.com/lly0010/winphp2025/internal/proc"
 	"github.com/lly0010/winphp2025/internal/services"
 	"github.com/lly0010/winphp2025/internal/sites"
@@ -875,3 +876,9 @@ func (a *App) OpenFolder(p string) error {
 // ============ 端口检测 ============
 
 func (a *App) PortInUse(port int) bool { return proc.PortListening(port) }
+
+// DiagnosePort 返回端口的完整诊断信息: 是否占用, 哪个进程占用 (PID/名字),
+// 是否被 Windows 系统预留 (HNS/WSL/Docker 常见), 以及友好建议字符串.
+func (a *App) DiagnosePort(port int) portcheck.PortInfo {
+	return portcheck.Diagnose(port)
+}

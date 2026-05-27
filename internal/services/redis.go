@@ -10,6 +10,7 @@ import (
 
 	"github.com/lly0010/winphp2025/internal/logger"
 	"github.com/lly0010/winphp2025/internal/paths"
+	"github.com/lly0010/winphp2025/internal/portcheck"
 	"github.com/lly0010/winphp2025/internal/proc"
 )
 
@@ -72,7 +73,7 @@ func (r Redis) Start() error {
 		return fmt.Errorf("Redis 已运行")
 	}
 	if proc.PortListening(6379) {
-		return fmt.Errorf("端口 6379 已被占用")
+		return fmt.Errorf("端口 6379 已被占用. %s", portcheck.Diagnose(6379).Diagnosis)
 	}
 	if ServiceExists(RedisServiceName) {
 		return StartService(RedisServiceName)

@@ -31,16 +31,24 @@
         <div class="t2">添加本地域名解析</div>
       </button>
       <button class="tool-btn" @click="checkPort(80)">
-        <div class="t1">检测端口 80</div>
-        <div class="t2">看是否被占用</div>
+        <div class="t1">诊断端口 80</div>
+        <div class="t2">谁占用 / 是否被 Win 预留</div>
       </button>
       <button class="tool-btn" @click="checkPort(3306)">
-        <div class="t1">检测端口 3306</div>
-        <div class="t2">看是否被占用</div>
+        <div class="t1">诊断端口 3306</div>
+        <div class="t2">MySQL</div>
       </button>
       <button class="tool-btn" @click="checkPort(5432)">
-        <div class="t1">检测端口 5432</div>
-        <div class="t2">看是否被占用</div>
+        <div class="t1">诊断端口 5432</div>
+        <div class="t2">PostgreSQL</div>
+      </button>
+      <button class="tool-btn" @click="checkPort(6379)">
+        <div class="t1">诊断端口 6379</div>
+        <div class="t2">Redis</div>
+      </button>
+      <button class="tool-btn" @click="checkPort(9000)">
+        <div class="t1">诊断端口 9000</div>
+        <div class="t2">PHP-CGI</div>
       </button>
       <button class="tool-btn" @click="api.NginxReload()">
         <div class="t1">Nginx reload</div>
@@ -64,8 +72,14 @@ async function openFolder(key) {
 }
 
 async function checkPort(n) {
-  const inUse = await api.PortInUse(n)
-  alert('端口 ' + n + (inUse ? ' 已被占用' : ' 空闲'))
+  try {
+    const info = await api.DiagnosePort(n)
+    alert(info.diagnosis || ('端口 ' + n + ' 状态未知'))
+  } catch (e) {
+    // 兜底: 老的 PortInUse
+    const inUse = await api.PortInUse(n)
+    alert('端口 ' + n + (inUse ? ' 已被占用' : ' 空闲'))
+  }
 }
 </script>
 

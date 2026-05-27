@@ -10,6 +10,7 @@ import (
 
 	"github.com/lly0010/winphp2025/internal/logger"
 	"github.com/lly0010/winphp2025/internal/paths"
+	"github.com/lly0010/winphp2025/internal/portcheck"
 	"github.com/lly0010/winphp2025/internal/proc"
 	"github.com/lly0010/winphp2025/internal/winshort"
 )
@@ -102,8 +103,51 @@ func (n Nginx) Start() error {
 		_ = cmd.Process.Release()
 	}
 	time.Sleep(700 * time.Millisecond)
+	// 校验是否真的起来了; 没起来调端口诊断给友好提示
+	if !n.Status().Running {
+		// 探测当前 listen 端口 (默认 80, 也可能是 vhost 改成的其他端口)
+		port := detectNginxPort()
+		diag := portcheck.Diagnose(port)
+		return fmt.Errorf(
+			"Nginx 启动后立即退出 (常见: 端口绑定失败). %s\n\n"+
+				"建议操作:\n"+
+				"  • 改 nginx.conf 把 'listen %d' 换成空闲端口 (如 8080), 浏览器用 http://localhost:8080\n"+
+				"  • 或在管理员 CMD 跑 'net stop winnat' 释放 Windows 预留端口, 再 'net start winnat'\n"+
+				"  • 查看 bin/nginx/logs/error.log 获取详细错误",
+			diag.Diagnosis, port,
+		)
+	}
 	logger.Info("Nginx 启动")
 	return nil
+}
+
+// detectNginxPort 从 nginx.conf 抓 'listen NNN' 第一个数字, 找不到就当 80.
+func detectNginxPort() int {
+	b, err := os.ReadFile(filepath.Join(paths.NginxDir, "conf", "nginx.conf"))
+	if err != nil {
+		return 80
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		l := strings.TrimSpace(line)
+		if !strings.HasPrefix(l, "listen") {
+			continue
+		}
+		// listen 80; / listen 80 default_server; / listen 127.0.0.1:80;
+		fields := strings.Fields(l)
+		if len(fields) < 2 {
+			continue
+		}
+		v := strings.TrimSuffix(fields[1], ";")
+		if i := strings.LastIndex(v, ":"); i >= 0 {
+			v = v[i+1:]
+		}
+		var n int
+		_, err := fmt.Sscanf(v, "%d", &n)
+		if err == nil && n > 0 {
+			return n
+		}
+	}
+	return 80
 }
 
 func (n Nginx) Stop() error {
