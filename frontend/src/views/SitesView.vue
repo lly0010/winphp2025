@@ -72,5 +72,9 @@ async function onAdded() { dlgOpen.value = false; await refresh() }
 .actions { display: flex; gap: 8px; }
 .muted { color: var(--text-secondary); font-size: 12px; }
 code { font-family: Consolas, monospace; font-size: 12px; }
-.page-title { font-size: 20px; font-weight: 600; margin: 0 0 16px; }
+.page-title {
+  font-size: 22px; font-weight: 700; margin: 0 0 18px;
+  background: var(--header-grad);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
 </style>

@@ -85,7 +85,11 @@ onUnmounted(() => clearInterval(timer))
 </script>
 
 <style scoped>
-.page-title { font-size: 20px; font-weight: 600; margin: 0 0 16px; }
+.page-title {
+  font-size: 22px; font-weight: 700; margin: 0 0 18px;
+  background: var(--header-grad);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
 .bigops { display: flex; gap: 10px; margin-bottom: 14px; }
 .bigops .btn { padding: 12px 22px; }
 .hint { margin: 0; font-size: 12px; color: var(--text-secondary); }

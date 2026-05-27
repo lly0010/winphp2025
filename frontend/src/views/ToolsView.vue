@@ -54,16 +54,47 @@
         <div class="t1">Nginx reload</div>
         <div class="t2">重载配置, 不停服务</div>
       </button>
+      <button class="tool-btn wallpaper-btn" @click="pickWallpaper">
+        <div class="t1">🌸 自定义壁纸</div>
+        <div class="t2">{{ hasWallpaper ? '已设置, 点击更换' : '让面板更萌一点' }}</div>
+      </button>
+      <button v-if="hasWallpaper" class="tool-btn" @click="clearWallpaper">
+        <div class="t1">移除壁纸</div>
+        <div class="t2">恢复默认背景</div>
+      </button>
     </div>
     <ConfigEditor v-if="hostsOpen" ckey="hosts" title="hosts" @close="hostsOpen = false" />
   </div>
 </template>
 
 <script setup>
-import { inject, ref } from 'vue'
+import { inject, ref, computed } from 'vue'
 import ConfigEditor from '../components/ConfigEditor.vue'
 const api = inject('api')
+const setWallpaperUrl = inject('setWallpaperUrl', () => {})
+const wallpaperUrl = inject('wallpaperUrl', ref(''))
 const hostsOpen = ref(false)
+const hasWallpaper = computed(() => !!wallpaperUrl.value)
+
+async function pickWallpaper() {
+  try {
+    const wp = await api.PickAndSetWallpaper()
+    if (wp && !wp.empty && wp.dataUrl) {
+      setWallpaperUrl(wp.dataUrl)
+    }
+  } catch (e) {
+    alert('设置壁纸失败: ' + e)
+  }
+}
+async function clearWallpaper() {
+  if (!confirm('确定移除当前壁纸?')) return
+  try {
+    await api.ClearWallpaper()
+    setWallpaperUrl('')
+  } catch (e) {
+    alert('移除失败: ' + e)
+  }
+}
 
 async function openFolder(key) {
   const p = await api.GetPaths()
@@ -84,18 +115,35 @@ async function checkPort(n) {
 </script>
 
 <style scoped>
-.page-title { font-size: 20px; font-weight: 600; margin: 0 0 16px; }
+.page-title {
+  font-size: 22px; font-weight: 700; margin: 0 0 18px;
+  background: var(--header-grad);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
 .tools-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 12px;
 }
 .tool-btn {
-  background: var(--bg-card); border: 1px solid var(--border);
+  background: var(--bg-card); border: 1px solid var(--border-soft);
   border-radius: var(--radius); padding: 16px;
   cursor: pointer; text-align: left;
-  transition: all 0.15s;
+  transition: all 0.2s cubic-bezier(.4,.2,.2,1);
+  backdrop-filter: blur(8px);
 }
-.tool-btn:hover { border-color: var(--primary); background: var(--primary-light); }
-.t1 { font-weight: 500; color: var(--text); margin-bottom: 4px; }
+.tool-btn:hover {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
+}
+.tool-btn.wallpaper-btn {
+  background: linear-gradient(135deg, #ffe5ef, #f3e8ff);
+  border-color: rgba(255, 111, 158, 0.35);
+}
+.tool-btn.wallpaper-btn:hover {
+  background: linear-gradient(135deg, #ffd6e6, #ead4ff);
+}
+.t1 { font-weight: 600; color: var(--text); margin-bottom: 4px; }
 .t2 { font-size: 12px; color: var(--text-secondary); }
 </style>

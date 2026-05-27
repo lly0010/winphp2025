@@ -1,6 +1,6 @@
 <template>
   <div class="home">
-    <h1 class="page-title">控制台</h1>
+    <h1 class="page-title"><span class="title-deco">✦</span> 控制台 <span class="title-deco">✦</span></h1>
 
     <div class="svc-grid">
       <ServiceCard kind="nginx"     label="Nginx"       :status="status.nginx"    @install="openInstall('nginx')"
@@ -172,7 +172,18 @@ async function openFolder(key) {
 </script>
 
 <style scoped>
-.page-title { font-size: 20px; font-weight: 600; margin: 0 0 16px; color: var(--text); }
+.page-title {
+  font-size: 22px; font-weight: 700; margin: 0 0 18px;
+  background: var(--header-grad);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  display: inline-flex; align-items: center; gap: 10px;
+}
+.title-deco {
+  font-size: 14px; color: var(--accent);
+  -webkit-text-fill-color: var(--accent);
+  animation: spin-slow 5s linear infinite;
+}
+@keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 .svc-grid {
   display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 16px;

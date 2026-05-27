@@ -43,7 +43,11 @@ watch(() => logs.list.length, async () => {
 </script>
 
 <style scoped>
-.page-title { font-size: 20px; font-weight: 600; margin: 0 0 12px; }
+.page-title {
+  font-size: 22px; font-weight: 700; margin: 0 0 18px;
+  background: var(--header-grad);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
 .actions { display: flex; gap: 8px; margin-bottom: 10px; }
 .actions input { width: 220px; }
 .log-pane {

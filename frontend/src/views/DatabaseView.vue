@@ -76,7 +76,11 @@ async function savePwd() {
 </script>
 
 <style scoped>
-.page-title { font-size: 20px; font-weight: 600; margin: 0 0 16px; }
+.page-title {
+  font-size: 22px; font-weight: 700; margin: 0 0 18px;
+  background: var(--header-grad);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
 .db-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .card-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
 .muted { color: var(--text-secondary); font-weight: normal; font-size: 13px; margin-left: 8px; }

@@ -1,8 +1,14 @@
 <template>
+  <!-- 壁纸层 (有自定义壁纸时显示) -->
+  <div v-if="wallpaperUrl" class="wallpaper" :style="{ backgroundImage: `url(${wallpaperUrl})` }"></div>
+
   <div class="layout">
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-title">WinPHP <span class="brand-accent">2025</span></div>
+        <div class="brand-title">
+          <span class="brand-icon">✿</span>
+          WinPHP <span class="brand-accent">2025</span>
+        </div>
         <div class="brand-sub">PHP / MySQL / Nginx / PG</div>
       </div>
 
@@ -50,14 +56,18 @@ import LogsView from './views/LogsView.vue'
 
 const view = ref('home')
 const navItems = [
-  { key: 'home',       label: '首页',     icon: '⌂' },
-  { key: 'sites',      label: '网站',     icon: '⌥' },
-  { key: 'database',   label: '数据库',   icon: '⛁' },
-  { key: 'extensions', label: 'PHP 扩展', icon: '⚙' },
+  { key: 'home',       label: '首页',     icon: '🏠' },
+  { key: 'sites',      label: '网站',     icon: '🌸' },
+  { key: 'database',   label: '数据库',   icon: '💾' },
+  { key: 'extensions', label: 'PHP 扩展', icon: '🧩' },
   { key: 'autostart',  label: '自启动',   icon: '⚡' },
-  { key: 'tools',      label: '工具',     icon: '⚒' },
+  { key: 'tools',      label: '工具',     icon: '🛠' },
   { key: 'logs',       label: '日志',     icon: '📋' }
 ]
+
+const wallpaperUrl = ref('')
+provide('wallpaperUrl', wallpaperUrl)
+provide('setWallpaperUrl', (u) => { wallpaperUrl.value = u || '' })
 
 // 通过 window.go.main.App.* 调用后端
 const api = window.go?.main?.App || {}
@@ -87,6 +97,14 @@ async function refreshAll() {
 }
 
 onMounted(async () => {
+  // 加载自定义壁纸 (如果有)
+  try {
+    if (api.GetWallpaper) {
+      const wp = await api.GetWallpaper()
+      if (wp && !wp.empty && wp.dataUrl) wallpaperUrl.value = wp.dataUrl
+    }
+  } catch (e) { /* ignore */ }
+
   await refreshAll()
   // 推送事件: 状态 + 日志
   if (window.runtime?.EventsOn) {
@@ -113,46 +131,82 @@ onUnmounted(() => {
 <style>
 .layout {
   display: flex; height: 100vh; overflow: hidden;
+  position: relative; z-index: 1;
 }
 .sidebar {
-  width: 220px; background: #1f2937;
+  width: 220px;
+  background: var(--sidebar-bg);
   display: flex; flex-direction: column;
   color: #e6e9ee;
+  position: relative;
+  box-shadow: 4px 0 24px rgba(45, 31, 77, 0.18);
 }
+/* 侧边栏顶部装饰光晕 */
+.sidebar::before {
+  content: ''; position: absolute;
+  top: -40px; left: -40px; right: -40px; height: 160px;
+  background: radial-gradient(ellipse at top, rgba(255,111,158,0.35), transparent 70%);
+  pointer-events: none;
+}
+
 .brand {
   padding: 22px 20px 18px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  position: relative;
 }
-.brand-title { font-size: 18px; font-weight: 600; }
-.brand-accent { color: #5fa9ff; }
-.brand-sub { font-size: 11px; color: #8b95a3; margin-top: 4px; }
+.brand-title {
+  font-size: 19px; font-weight: 700;
+  display: flex; align-items: center; gap: 6px;
+  color: #fff;
+  text-shadow: 0 2px 8px rgba(255, 111, 158, 0.4);
+}
+.brand-icon {
+  display: inline-block; color: #ffb1cf;
+  animation: spin-slow 6s linear infinite;
+  font-size: 18px;
+}
+@keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.brand-accent { color: #ffb1cf; }
+.brand-sub { font-size: 11px; color: #b8a3d4; margin-top: 4px; letter-spacing: 0.3px; }
 
-.nav { flex: 1; padding: 12px 8px; }
+.nav { flex: 1; padding: 14px 10px; position: relative; z-index: 1; }
 .nav a {
   display: flex; align-items: center; gap: 10px;
-  padding: 10px 14px; border-radius: 6px;
-  color: #c1c7d0; cursor: pointer;
-  margin-bottom: 2px;
+  padding: 10px 14px; border-radius: 10px;
+  color: #c8bedb; cursor: pointer;
+  margin-bottom: 3px;
   font-size: 14px;
+  transition: all 0.18s;
+  position: relative;
 }
-.nav a:hover { background: rgba(255,255,255,0.05); color: #fff; }
-.nav a.active { background: var(--primary); color: #fff; }
-.nav .ico { width: 18px; text-align: center; font-size: 15px; }
+.nav a:hover { background: rgba(255,255,255,0.08); color: #fff; transform: translateX(2px); }
+.nav a.active {
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(255, 111, 158, 0.45);
+}
+.nav .ico { width: 20px; text-align: center; font-size: 15px; }
 
-.sidebar-foot { padding: 14px; border-top: 1px solid rgba(255,255,255,0.06); }
+.sidebar-foot { padding: 14px; border-top: 1px solid rgba(255,255,255,0.08); position: relative; z-index: 1; }
 .bulk-btns { display: flex; gap: 6px; margin-bottom: 10px; }
-.bulk-btns .btn { flex: 1; padding: 7px 0; font-size: 12px; }
-.bulk-btns .btn:not(.primary) { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12); color: #c1c7d0; }
-.bulk-btns .btn:not(.primary):hover { background: rgba(255,255,255,0.1); color: #fff; }
-.admin-tag {
-  font-size: 11px; color: #e8a83c;
-  text-align: center;
-  padding: 4px 6px; background: rgba(232,168,60,0.1); border-radius: 4px;
+.bulk-btns .btn { flex: 1; padding: 8px 0; font-size: 12px; border-radius: 10px; }
+.bulk-btns .btn:not(.primary) {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.15); color: #d8cee8;
+  backdrop-filter: none;
 }
-.admin-tag.ok { color: var(--success); background: rgba(60,170,60,0.1); }
+.bulk-btns .btn:not(.primary):hover { background: rgba(255,255,255,0.16); color: #fff; }
+.admin-tag {
+  font-size: 11px; color: #ffd28a;
+  text-align: center;
+  padding: 5px 8px; background: rgba(255,183,77,0.15); border-radius: 8px;
+}
+.admin-tag.ok { color: #b6f5be; background: rgba(95, 203, 111, 0.15); }
 
 .content {
   flex: 1; overflow: auto;
   padding: 24px;
+  position: relative;
+  z-index: 1;
 }
 </style>

@@ -59,7 +59,11 @@ async function restartPhp() {
 </script>
 
 <style scoped>
-.page-title { font-size: 20px; font-weight: 600; margin: 0 0 16px; }
+.page-title {
+  font-size: 22px; font-weight: 700; margin: 0 0 18px;
+  background: var(--header-grad);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
 .actions { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; }
 .muted { color: var(--text-secondary); font-size: 12px; margin-left: auto; }
 .ext-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }

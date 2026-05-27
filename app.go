@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -871,6 +872,117 @@ func (a *App) OpenFolder(p string) error {
 		return err
 	}
 	return execOpen(p)
+}
+
+// ============ 壁纸 (二次元美化) ============
+
+// Wallpaper 自定义壁纸返回结构.
+type Wallpaper struct {
+	DataURL string `json:"dataUrl"` // base64 data URL, 前端直接 set 到 background-image
+	Path    string `json:"path"`    // 本地保存路径
+	Empty   bool   `json:"empty"`   // 没壁纸时为 true
+}
+
+var wallpaperExts = []string{".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
+
+func base64Encode(b []byte) string { return base64.StdEncoding.EncodeToString(b) }
+
+func wallpaperMime(ext string) string {
+	switch strings.ToLower(ext) {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".webp":
+		return "image/webp"
+	case ".gif":
+		return "image/gif"
+	case ".bmp":
+		return "image/bmp"
+	}
+	return "application/octet-stream"
+}
+
+// GetWallpaper 加载当前已设置的壁纸 (启动时前端会调).
+func (a *App) GetWallpaper() Wallpaper {
+	for _, ext := range wallpaperExts {
+		p := filepath.Join(paths.ConfigDir, "wallpaper"+ext)
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		return Wallpaper{
+			DataURL: "data:" + wallpaperMime(ext) + ";base64," + base64Encode(data),
+			Path:    p,
+		}
+	}
+	return Wallpaper{Empty: true}
+}
+
+// PickAndSetWallpaper 弹文件对话框让用户选图, 复制到 config/ 并返回 dataURL.
+func (a *App) PickAndSetWallpaper() (Wallpaper, error) {
+	selected, err := wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{
+		Title: "选择壁纸图片",
+		Filters: []wruntime.FileFilter{
+			{DisplayName: "图片 (*.jpg;*.jpeg;*.png;*.webp;*.gif;*.bmp)",
+				Pattern: "*.jpg;*.jpeg;*.png;*.webp;*.gif;*.bmp"},
+			{DisplayName: "All files", Pattern: "*.*"},
+		},
+	})
+	if err != nil {
+		return Wallpaper{Empty: true}, err
+	}
+	if selected == "" {
+		return Wallpaper{Empty: true}, nil
+	}
+	return a.setWallpaperFromFile(selected)
+}
+
+func (a *App) setWallpaperFromFile(src string) (Wallpaper, error) {
+	ext := strings.ToLower(filepath.Ext(src))
+	valid := false
+	for _, e := range wallpaperExts {
+		if e == ext {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		return Wallpaper{Empty: true}, fmt.Errorf("不支持的图片格式: %s (仅 jpg/png/webp/gif/bmp)", ext)
+	}
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return Wallpaper{Empty: true}, err
+	}
+	// 大小限制 (10 MB)
+	if len(data) > 10*1024*1024 {
+		return Wallpaper{Empty: true}, fmt.Errorf("壁纸文件过大 (%.1f MB), 建议 < 10 MB", float64(len(data))/1024/1024)
+	}
+	target := filepath.Join(paths.ConfigDir, "wallpaper"+ext)
+	if err := os.WriteFile(target, data, 0o644); err != nil {
+		return Wallpaper{Empty: true}, err
+	}
+	// 删除其他扩展名旧壁纸 (确保只有一个)
+	for _, oldExt := range wallpaperExts {
+		if oldExt == ext {
+			continue
+		}
+		_ = os.Remove(filepath.Join(paths.ConfigDir, "wallpaper"+oldExt))
+	}
+	logger.Info("壁纸已更新: %s (%.1f KB)", target, float64(len(data))/1024)
+	return Wallpaper{
+		DataURL: "data:" + wallpaperMime(ext) + ";base64," + base64Encode(data),
+		Path:    target,
+	}, nil
+}
+
+// ClearWallpaper 删除当前壁纸.
+func (a *App) ClearWallpaper() error {
+	for _, ext := range wallpaperExts {
+		_ = os.Remove(filepath.Join(paths.ConfigDir, "wallpaper"+ext))
+	}
+	logger.Info("壁纸已清除")
+	return nil
 }
 
 // ============ 端口检测 ============
