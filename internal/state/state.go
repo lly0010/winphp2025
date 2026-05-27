@@ -26,7 +26,6 @@ type Site struct {
 	PhpVersion string `json:"phpVersion,omitempty"`
 	Template   string `json:"template,omitempty"`
 	Rewrite    string `json:"rewrite,omitempty"` // 伪静态: default / thinkphp / discuz / none
-	CORS       bool   `json:"cors,omitempty"`    // 是否启用 CORS 跨域响应头
 	CreatedAt  string `json:"createdAt"`
 }
 

@@ -16,7 +16,6 @@ import (
 
 // vhost 模板. 占位符:
 //   ##SITE## / ##SERVER_NAME## / ##ROOT## / ##PORT##
-//   ##CORS_BLOCK## - 跨域响应头 (开启时填入, 否则空)
 //   ##REWRITE_BLOCK## - 伪静态规则 (location / { ... }), 不同框架不同
 const defaultVhost = `server {
     listen       ##PORT## ;
@@ -27,7 +26,6 @@ const defaultVhost = `server {
     access_log   logs/##SITE##.access.log main ;
     error_log    logs/##SITE##.error.log ;
 
-##CORS_BLOCK##
 ##REWRITE_BLOCK##
 
     location ~ \.php$ {
@@ -98,26 +96,6 @@ func rewriteBlock(kind string) string {
     }`
 }
 
-// corsBlock CORS 响应头.
-func corsBlock(enable bool) string {
-	if !enable {
-		return ""
-	}
-	return `    # CORS 跨域 (由 WinPHP 生成)
-    add_header Access-Control-Allow-Origin  "$http_origin" always;
-    add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH" always;
-    add_header Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept, Origin" always;
-    add_header Access-Control-Allow-Credentials "true" always;
-    add_header Access-Control-Max-Age "86400" always;
-    if ($request_method = OPTIONS) {
-        add_header Access-Control-Allow-Origin  "$http_origin";
-        add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH";
-        add_header Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept, Origin";
-        add_header Access-Control-Max-Age "86400";
-        return 204;
-    }`
-}
-
 type AddSiteInput struct {
 	Name       string `json:"name"`
 	ServerName string `json:"serverName"`
@@ -125,7 +103,6 @@ type AddSiteInput struct {
 	Port       int    `json:"port"`
 	Template   string `json:"template"` // "php" / "laravel" / "wordpress" / "static"
 	Rewrite    string `json:"rewrite"`  // "default" / "thinkphp" / "discuz" / "ecshop" / "none"
-	CORS       bool   `json:"cors"`     // 是否启用 CORS 响应头
 	AddHosts   bool   `json:"addHosts"`
 }
 
@@ -195,7 +172,6 @@ func Add(in AddSiteInput) error {
 		"##SERVER_NAME##", in.ServerName,
 		"##ROOT##", filepath.ToSlash(winshort.Short(vhostRoot)),
 		"##PORT##", fmt.Sprintf("%d", in.Port),
-		"##CORS_BLOCK##", corsBlock(in.CORS),
 		"##REWRITE_BLOCK##", rewriteBlock(rewriteKind),
 	).Replace(defaultVhost)
 	if err := os.WriteFile(filepath.Join(vhostDir, in.Name+".conf"), []byte(vhost), 0o644); err != nil {
@@ -218,7 +194,6 @@ func Add(in AddSiteInput) error {
 		Port:       in.Port,
 		Template:   in.Template,
 		Rewrite:    rewriteKind,
-		CORS:       in.CORS,
 		CreatedAt:  time.Now().Format("2006-01-02 15:04:05"),
 	})
 	if err := state.SaveSites(out); err != nil {

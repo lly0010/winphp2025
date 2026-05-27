@@ -71,7 +71,6 @@
         <div class="form-row">
           <label></label>
           <div class="input-group" style="flex-direction: column; align-items: flex-start; gap: 6px;">
-            <label class="cb"><input type="checkbox" v-model="cors" /> 启用 CORS 跨域 (Allow-Origin / Methods / Headers + OPTIONS 预检)</label>
             <label class="cb"><input type="checkbox" v-model="addHosts" /> 自动写入 hosts 文件 (需管理员)</label>
             <label class="cb"><input type="checkbox" v-model="reload" /> 创建后立即 nginx reload</label>
           </div>
@@ -103,7 +102,6 @@ const template = ref(props.presetTemplate)
 const createDb = ref(props.presetTemplate === 'wordpress')
 const dbPwd = ref('')
 const rewrite = ref('default')
-const cors = ref(false)
 const addHosts = ref(true)
 const reload = ref(true)
 const submitting = ref(false)
@@ -141,7 +139,6 @@ async function submit() {
       port: Number(port.value) || 80,
       template: template.value,
       rewrite: rewrite.value,
-      cors: cors.value,
       addHosts: addHosts.value
     })
     if (createDb.value) {
