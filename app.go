@@ -597,18 +597,24 @@ func (a *App) stopFor(kind string) {
 	}
 }
 
+// initConfigFor 调对应组件的 InitConfig, 把错误记到日志而不是吞掉.
+// 这样如果配置文件没写成功, 用户能在日志里看到原因.
 func (a *App) initConfigFor(kind string) {
+	var err error
 	switch kind {
 	case "nginx":
-		_ = a.nginx.InitConfig()
+		err = a.nginx.InitConfig()
 	case "php":
-		_ = a.php.InitConfig()
+		err = a.php.InitConfig()
 	case "mysql":
-		_ = a.mysql.InitConfig()
+		err = a.mysql.InitConfig()
 	case "postgresql", "postgres":
-		_ = a.pg.InitConfig()
+		err = a.pg.InitConfig()
 	case "redis":
-		_ = a.redis.InitConfig()
+		err = a.redis.InitConfig()
+	}
+	if err != nil {
+		logger.Error("%s 配置初始化失败: %v", kind, err)
 	}
 }
 

@@ -96,6 +96,13 @@ func (m MySQL) Start() error {
 	if m.Status().Running {
 		return fmt.Errorf("MySQL 已运行")
 	}
+	// 自我修复 my.ini
+	if _, err := os.Stat(m.IniPath()); err != nil {
+		logger.Warn("my.ini 不存在, 自动重新生成")
+		if e := m.InitConfig(); e != nil {
+			return fmt.Errorf("my.ini 不存在, 自动生成失败: %v", e)
+		}
+	}
 	st := state.Load()
 	if !st.MysqlInited {
 		if err := m.initData(); err != nil {

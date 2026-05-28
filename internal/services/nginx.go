@@ -82,6 +82,18 @@ func (n Nginx) Start() error {
 	if n.Status().Running {
 		return fmt.Errorf("Nginx 已在运行")
 	}
+	// 自我修复: 启动前检查 conf/nginx.conf 是否存在, 不存在就重新生成.
+	// 防止 zip 解压异常 / 用户手动删配置 / 升级时遗留不完整状态.
+	confFile := filepath.Join(paths.NginxDir, "conf", "nginx.conf")
+	if _, err := os.Stat(confFile); err != nil {
+		logger.Warn("nginx.conf 不存在 (%s), 自动重新生成默认配置", confFile)
+		if e := n.InitConfig(); e != nil {
+			return fmt.Errorf("nginx.conf 不存在, 自动生成也失败: %v\n请重新点 '安装/切换版本' 重装", e)
+		}
+		if _, err := os.Stat(confFile); err != nil {
+			return fmt.Errorf("nginx.conf 仍不存在 (%s), 请检查 bin/nginx/conf 目录权限或重装", confFile)
+		}
+	}
 	// 配置语法测试
 	if out, err := runHidden(exe, 5*time.Second, "-t", "-p", winshort.Short(paths.NginxDir)); err != nil {
 		return fmt.Errorf("nginx -t 失败: %v\n%s", err, out)

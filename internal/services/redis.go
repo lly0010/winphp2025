@@ -72,6 +72,13 @@ func (r Redis) Start() error {
 	if r.Status().Running {
 		return fmt.Errorf("Redis 已运行")
 	}
+	// 自我修复 redis.windows.conf
+	if _, err := os.Stat(r.ConfPath()); err != nil {
+		logger.Warn("redis.windows.conf 不存在, 自动重新生成")
+		if e := (Redis{}).InitConfig(); e != nil {
+			return fmt.Errorf("Redis 配置不存在, 自动生成失败: %v", e)
+		}
+	}
 	if proc.PortListening(6379) {
 		return fmt.Errorf("端口 6379 已被占用. %s", portcheck.Diagnose(6379).Diagnosis)
 	}

@@ -73,6 +73,13 @@ func (p PHP) Start() error {
 	if p.Status().Running {
 		return fmt.Errorf("PHP-CGI 已运行")
 	}
+	// 自我修复 php.ini
+	if _, err := os.Stat(p.IniPath()); err != nil {
+		logger.Warn("php.ini 不存在, 自动重新生成")
+		if e := (PHP{}).InitConfig(); e != nil {
+			return fmt.Errorf("php.ini 不存在, 自动生成失败: %v", e)
+		}
+	}
 	if proc.PortListening(9000) {
 		return fmt.Errorf("端口 9000 已被占用. %s", portcheck.Diagnose(9000).Diagnosis)
 	}
