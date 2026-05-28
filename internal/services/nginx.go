@@ -99,7 +99,7 @@ func (n Nginx) Start() error {
 	// 用 cwd 作 prefix. nginx 对 -p 后路径的混合斜杠拼接有 bug
 	// ("bin\\nginx" + "conf/nginx.conf" => "bin\\nginx\\conf/nginx.conf"),
 	// 走 cwd 完全规避.
-	nginxShort := winshort.Short(paths.NginxDir)
+	nginxShort := winshort.ShortIfNeeded(paths.NginxDir)
 	if out, err := runHiddenIn(nginxShort, exe, 5*time.Second, "-t"); err != nil {
 		return fmt.Errorf("nginx -t 失败: %v\n%s", err, out)
 	}
@@ -172,7 +172,7 @@ func (n Nginx) Stop() error {
 	}
 	exe := n.ExePath()
 	if _, err := os.Stat(exe); err == nil && proc.HasProcessByPathPrefix("nginx", paths.NginxDir) {
-		_, _ = runHiddenIn(winshort.Short(paths.NginxDir), exe, 5*time.Second, "-s", "stop")
+		_, _ = runHiddenIn(winshort.ShortIfNeeded(paths.NginxDir), exe, 5*time.Second, "-s", "stop")
 	}
 	time.Sleep(400 * time.Millisecond)
 	// 强杀残留
@@ -192,7 +192,7 @@ func (n Nginx) Reload() error {
 	if _, err := os.Stat(exe); err != nil {
 		return fmt.Errorf("Nginx 未安装")
 	}
-	wd := winshort.Short(paths.NginxDir)
+	wd := winshort.ShortIfNeeded(paths.NginxDir)
 	if out, err := runHiddenIn(wd, exe, 5*time.Second, "-t"); err != nil {
 		return fmt.Errorf("nginx -t: %v\n%s", err, out)
 	}
@@ -218,7 +218,7 @@ func (Nginx) InitConfig() error {
 	}
 	tpl, _ := readTemplate("nginx.conf", defaultNginxConf)
 	// 用短路径避免中文 root 启动失败
-	wwwShort := filepath.ToSlash(winshort.Short(paths.WwwDir))
+	wwwShort := filepath.ToSlash(winshort.ShortIfNeeded(paths.WwwDir))
 	conf := strings.ReplaceAll(tpl, "##WWW_ROOT##", wwwShort)
 	if err := os.WriteFile(filepath.Join(confDir, "nginx.conf"), []byte(conf), 0o644); err != nil {
 		return err

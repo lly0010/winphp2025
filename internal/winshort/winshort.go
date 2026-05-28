@@ -13,3 +13,15 @@ package winshort
 func Short(path string) string {
 	return shortImpl(path)
 }
+
+// ShortIfNeeded 仅当路径含非 ASCII 字符时才转短路径; 全 ASCII 直接原样返回.
+// 用这个能避免给英文路径无端转出 'DOWNLO~1' 这种短名导致 nginx 等程序
+// 拼接路径时产生混合斜杠 bug.
+func ShortIfNeeded(path string) string {
+	for _, r := range path {
+		if r > 127 {
+			return shortImpl(path)
+		}
+	}
+	return path
+}

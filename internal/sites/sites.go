@@ -170,7 +170,7 @@ func Add(in AddSiteInput) error {
 	vhost := strings.NewReplacer(
 		"##SITE##", in.Name,
 		"##SERVER_NAME##", in.ServerName,
-		"##ROOT##", filepath.ToSlash(winshort.Short(vhostRoot)),
+		"##ROOT##", filepath.ToSlash(winshort.ShortIfNeeded(vhostRoot)),
 		"##PORT##", fmt.Sprintf("%d", in.Port),
 		"##REWRITE_BLOCK##", rewriteBlock(rewriteKind),
 	).Replace(defaultVhost)
