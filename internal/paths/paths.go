@@ -3,9 +3,15 @@ package paths
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
-// 全局路径. 所有组件二进制、网站、配置、日志都放在面板可执行文件所在目录下.
+// 全局路径. 所有组件二进制、网站、配置、日志都放在 Root 目录下.
+// Root 的选择优先级:
+//   1. 环境变量 WINPHP_DATA_DIR (开发用)
+//   2. EXE 旁的 data-dir.txt 里写的路径 (用户在工具页设置后写入)
+//   3. EXE 所在目录 (默认, 向后兼容)
+// 用 data-dir.txt 把数据目录跟 EXE 分开, 更新 EXE 时数据完全独立不丢.
 
 var (
 	Root      string // 面板根目录
@@ -30,16 +36,35 @@ var (
 	HostsFile string // C:\Windows\System32\drivers\etc\hosts
 )
 
+// PointerFileName 在 EXE 旁的指针文件名, 写一行路径就把 Root 切到那里.
+const PointerFileName = "data-dir.txt"
+
+// ExeDir 返回 EXE 所在目录 (无论 Root 被切到哪, 这个总是固定的).
+// 指针文件 data-dir.txt 永远写在这里.
+var ExeDir string
+
 func Init() error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
 	}
-	Root = filepath.Dir(exe)
+	ExeDir = filepath.Dir(exe)
+	Root = ExeDir
 
-	// 开发模式: 当 go run / wails dev 时, exe 在 tmp 目录, 用 cwd
+	// 1) 环境变量 (最高优先级, 开发用)
 	if env := os.Getenv("WINPHP_DEV_ROOT"); env != "" {
 		Root = env
+	} else if env := os.Getenv("WINPHP_DATA_DIR"); env != "" {
+		Root = env
+	} else {
+		// 2) 指针文件
+		if b, err := os.ReadFile(filepath.Join(ExeDir, PointerFileName)); err == nil {
+			if p := strings.TrimSpace(string(b)); p != "" {
+				if abs, err := filepath.Abs(p); err == nil {
+					Root = abs
+				}
+			}
+		}
 	}
 
 	BinDir = filepath.Join(Root, "bin")
@@ -73,4 +98,30 @@ func Init() error {
 		}
 	}
 	return nil
+}
+
+// PointerPath 返回指针文件的绝对路径 (永远在 EXE 旁, 跟数据目录无关).
+func PointerPath() string {
+	return filepath.Join(ExeDir, PointerFileName)
+}
+
+// SetDataDirPointer 把目标路径写入指针文件. 调用后需重启面板才生效.
+// 传空字符串则删除指针 (回到默认: 数据放 EXE 同目录).
+func SetDataDirPointer(target string) error {
+	p := PointerPath()
+	if target == "" {
+		err := os.Remove(p)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	abs, err := filepath.Abs(target)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(abs, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(p, []byte(abs+"\n"), 0o644)
 }

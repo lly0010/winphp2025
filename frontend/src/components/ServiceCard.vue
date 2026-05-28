@@ -65,12 +65,17 @@ const busy = reactive({ start: false, stop: false, restart: false })
 async function run(action) {
   const key = action.toLowerCase()
   busy[key] = true
+  // 兜底: 15 秒后强制复位, 防止后端 promise 因任何原因 hang 时按钮永远转圈
+  const safety = setTimeout(() => { busy[key] = false }, 15000)
   try {
     if (action === 'Start') await api.StartService(props.kind)
     else if (action === 'Stop') await api.StopService(props.kind)
     else if (action === 'Restart') await api.RestartService(props.kind)
   } catch (e) { alert(action + ' 失败: ' + e) }
-  finally { busy[key] = false }
+  finally {
+    clearTimeout(safety)
+    busy[key] = false
+  }
 }
 </script>
 

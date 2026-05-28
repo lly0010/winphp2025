@@ -66,14 +66,45 @@
         <div class="t1">🎨 切换主题</div>
         <div class="t2">内置粉紫/蓝色, 支持第三方主题包</div>
       </button>
+      <button class="tool-btn data-btn" @click="dataDirOpen = true">
+        <div class="t1">📦 数据目录</div>
+        <div class="t2 t2-data">{{ dataDirShort }}</div>
+      </button>
     </div>
+
+    <!-- 数据目录对话框 -->
+    <div v-if="dataDirOpen" class="modal-mask" @click.self="dataDirOpen = false">
+      <div class="modal" style="width: 600px">
+        <div class="modal-header">数据目录设置</div>
+        <div class="modal-body">
+          <div class="info-row"><span class="lbl">当前数据目录</span><code>{{ dataInfo.current }}</code></div>
+          <div class="info-row"><span class="lbl">EXE 所在</span><code>{{ dataInfo.exeDir }}</code></div>
+          <div class="info-row"><span class="lbl">指针文件</span><code>{{ dataInfo.pointerPath }}</code> {{ dataInfo.pointerExist ? '✓ 已设置' : '(未设置)' }}</div>
+
+          <div class="tip">
+            指针文件 <code>data-dir.txt</code> 放在 EXE 旁, 内容是一行路径.
+            <br>设置后所有 <code>bin/ www/ config/ logs/</code> 都放进新路径,
+            <strong>更新 EXE 时数据完全独立不丢</strong>.
+            <br>修改后需要重启面板才生效.
+          </div>
+
+          <div v-if="msg" :class="['msg', msgKind]">{{ msg }}</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" @click="dataDirOpen = false">关闭</button>
+          <button class="btn" :disabled="!dataInfo.pointerExist" @click="resetDataDir">恢复默认 (回 EXE 目录)</button>
+          <button class="btn primary" @click="pickDataDir">选择新目录...</button>
+        </div>
+      </div>
+    </div>
+
     <ConfigEditor v-if="hostsOpen" ckey="hosts" title="hosts" @close="hostsOpen = false" />
     <ThemeDialog v-if="themeOpen" @close="themeOpen = false" />
   </div>
 </template>
 
 <script setup>
-import { inject, ref, computed } from 'vue'
+import { inject, ref, computed, onMounted, watch } from 'vue'
 import ConfigEditor from '../components/ConfigEditor.vue'
 import ThemeDialog from '../components/ThemeDialog.vue'
 const api = inject('api')
@@ -81,7 +112,54 @@ const setWallpaperUrl = inject('setWallpaperUrl', () => {})
 const wallpaperUrl = inject('wallpaperUrl', ref(''))
 const hostsOpen = ref(false)
 const themeOpen = ref(false)
+const dataDirOpen = ref(false)
+const dataInfo = ref({ current: '', exeDir: '', pointerExist: false, pointerPath: '' })
+const msg = ref('')
+const msgKind = ref('ok')
 const hasWallpaper = computed(() => !!wallpaperUrl.value)
+const dataDirShort = computed(() => {
+  const p = dataInfo.value.current || ''
+  if (!p) return '加载中...'
+  // 太长截短显示, 保留头尾
+  if (p.length > 36) return p.slice(0, 14) + '...' + p.slice(-18)
+  return p
+})
+
+async function loadDataInfo() {
+  try { dataInfo.value = await api.GetDataDirInfo() || dataInfo.value }
+  catch { /* ignore */ }
+}
+onMounted(loadDataInfo)
+watch(dataDirOpen, v => { if (v) { msg.value = ''; loadDataInfo() } })
+
+async function pickDataDir() {
+  msg.value = ''
+  try {
+    const info = await api.PickAndSetDataDir()
+    if (info) dataInfo.value = info
+    if (info && info.pointerExist) {
+      msg.value = '✓ 已保存. 请关闭面板后重新打开, 新数据目录才生效.'
+      msgKind.value = 'ok'
+    }
+  } catch (e) {
+    msg.value = '失败: ' + e
+    msgKind.value = 'err'
+  }
+}
+
+async function resetDataDir() {
+  if (!confirm('恢复默认会删除指针文件 data-dir.txt, 重启后数据回到 EXE 同目录. 继续?')) return
+  msg.value = ''
+  try {
+    const info = await api.ResetDataDir()
+    if (info) dataInfo.value = info
+    msg.value = '✓ 已恢复默认. 重启面板生效.'
+    msgKind.value = 'ok'
+  } catch (e) {
+    msg.value = '失败: ' + e
+    msgKind.value = 'err'
+  }
+}
 
 async function pickWallpaper() {
   try {
@@ -158,6 +236,29 @@ async function checkPort(n) {
 .tool-btn.theme-btn:hover {
   background: linear-gradient(135deg, #d6e7f5, #ead4ff);
 }
+.tool-btn.data-btn {
+  background: linear-gradient(135deg, #fffbeb, #fff0d6);
+  border-color: rgba(255, 183, 77, 0.40);
+}
+.tool-btn.data-btn:hover {
+  background: linear-gradient(135deg, #fff3cf, #ffe0a8);
+}
+.t2-data { font-family: Consolas, monospace; font-size: 11px; word-break: break-all; }
+
+.info-row { display: flex; align-items: baseline; gap: 8px; padding: 6px 0; }
+.info-row .lbl { width: 110px; flex-shrink: 0; color: var(--text-secondary); font-size: 12px; }
+.info-row code { font-family: Consolas, monospace; font-size: 12px; word-break: break-all; color: var(--primary-dark); }
+.tip {
+  margin-top: 14px; padding: 12px 14px;
+  background: linear-gradient(135deg, #fffbeb, #fff0d6);
+  border-left: 3px solid var(--warning); border-radius: 6px;
+  font-size: 12px; color: var(--text-secondary); line-height: 1.7;
+}
+.tip code { background: #fff3cd; padding: 1px 5px; border-radius: 3px; font-family: Consolas, monospace; }
+.tip strong { color: var(--danger); }
+.msg { margin-top: 12px; padding: 8px 12px; border-radius: 6px; font-size: 12px; }
+.msg.ok  { color: #2d7a2d; background: rgba(95,203,111,0.10); }
+.msg.err { color: var(--danger); background: #fff5f5; }
 .t1 { font-weight: 600; color: var(--text); margin-bottom: 4px; }
 .t2 { font-size: 12px; color: var(--text-secondary); }
 </style>

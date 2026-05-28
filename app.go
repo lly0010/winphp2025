@@ -1044,6 +1044,58 @@ func (a *App) ClearWallpaper() error {
 	return nil
 }
 
+// ============ 数据目录 (升级保留数据) ============
+
+type DataDirInfo struct {
+	Current      string `json:"current"`      // 当前实际生效的数据目录
+	ExeDir       string `json:"exeDir"`       // EXE 所在目录 (指针文件总是放这里)
+	PointerExist bool   `json:"pointerExist"` // EXE 旁是否已有 data-dir.txt
+	PointerPath  string `json:"pointerPath"`  // 指针文件的完整路径
+}
+
+// GetDataDirInfo 返回当前数据目录及指针状态.
+func (a *App) GetDataDirInfo() DataDirInfo {
+	info := DataDirInfo{
+		Current:     paths.Root,
+		ExeDir:      paths.ExeDir,
+		PointerPath: paths.PointerPath(),
+	}
+	if _, err := os.Stat(info.PointerPath); err == nil {
+		info.PointerExist = true
+	}
+	return info
+}
+
+// PickAndSetDataDir 弹文件夹选择对话框, 把目标路径写入 EXE 旁的 data-dir.txt.
+// 用户需重启面板才生效 (返回前不切换 paths.Root, 避免运行中乱).
+func (a *App) PickAndSetDataDir() (DataDirInfo, error) {
+	selected, err := wruntime.OpenDirectoryDialog(a.ctx, wruntime.OpenDialogOptions{
+		Title:                "选择新的数据目录 (bin / www / config / logs 都将放这里)",
+		DefaultDirectory:     paths.Root,
+		CanCreateDirectories: true,
+	})
+	if err != nil {
+		return a.GetDataDirInfo(), err
+	}
+	if selected == "" {
+		return a.GetDataDirInfo(), nil
+	}
+	if err := paths.SetDataDirPointer(selected); err != nil {
+		return a.GetDataDirInfo(), err
+	}
+	logger.Info("数据目录指针已写入 (重启面板生效): %s -> %s", paths.PointerPath(), selected)
+	return a.GetDataDirInfo(), nil
+}
+
+// ResetDataDir 删除指针文件, 回到默认 (数据放 EXE 同目录).
+func (a *App) ResetDataDir() (DataDirInfo, error) {
+	if err := paths.SetDataDirPointer(""); err != nil {
+		return a.GetDataDirInfo(), err
+	}
+	logger.Info("数据目录指针已删除, 重启后数据回到 EXE 目录")
+	return a.GetDataDirInfo(), nil
+}
+
 // ============ 端口检测 ============
 
 func (a *App) PortInUse(port int) bool { return proc.PortListening(port) }
