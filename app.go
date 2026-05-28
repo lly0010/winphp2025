@@ -689,6 +689,25 @@ func (a *App) PhpSetExtension(name string, enable bool) error {
 	return nil
 }
 
+// PhpInstallableExts 返回可在线安装的 PHP 扩展清单 (内置常用: redis, memcached, mongodb, xdebug ...).
+func (a *App) PhpInstallableExts() []services.InstallableExt {
+	return services.KnownInstallableExts()
+}
+
+// PhpInstallExtension 从 PECL 在线下载并安装一个 PHP 扩展.
+// 自动检测 PHP 版本和 VS 编译标签, 构造 PECL Windows zip URL,
+// 下载 → 解压 → 拷贝 *.dll 到 ext/ → 改 php.ini 启用. 重启 PHP-CGI 生效.
+func (a *App) PhpInstallExtension(name, extVer string) error {
+	ctx := a.registerCancel("phpext:" + name)
+	defer a.clearCancel("phpext:" + name)
+	prog := func(d, t int64) {
+		wruntime.EventsEmit(a.ctx, "phpext:progress", map[string]any{
+			"name": name, "version": extVer, "loaded": d, "total": t,
+		})
+	}
+	return a.php.InstallExtensionFromPECL(ctx, name, extVer, prog)
+}
+
 // ============ 自启 ============
 
 func (a *App) EnsureNssm() error {

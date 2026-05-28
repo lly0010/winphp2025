@@ -1,0 +1,196 @@
+package services
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/lly0010/winphp2025/internal/download"
+	"github.com/lly0010/winphp2025/internal/extract"
+	"github.com/lly0010/winphp2025/internal/logger"
+	"github.com/lly0010/winphp2025/internal/paths"
+)
+
+// InstallableExt 一个可在线安装的 PHP 扩展 (从 PECL 拉取预编译 DLL).
+type InstallableExt struct {
+	Name      string   `json:"name"`      // 短名: "redis" -> 装出 php_redis.dll, php.ini 写 extension=redis
+	Display   string   `json:"display"`   // 显示名
+	Type      string   `json:"type"`      // "extension" / "zend_extension"
+	Versions  []string `json:"versions"`  // 可选版本号 (PECL 上的)
+	Default   string   `json:"default"`   // 默认选中版本
+	Deps      []string `json:"deps"`      // 依赖的其他扩展 (会一起装)
+	Note      string   `json:"note,omitempty"`
+}
+
+// KnownInstallableExts 内置的"一键装"扩展清单. 用户也可以编辑 php.ini 自己改.
+func KnownInstallableExts() []InstallableExt {
+	return []InstallableExt{
+		{
+			Name: "redis", Display: "Redis 客户端", Type: "extension",
+			Versions: []string{"6.1.0", "6.0.2", "5.3.7"}, Default: "6.0.2",
+			Deps: []string{"igbinary"},
+			Note: "连接 Redis 服务. 通常配合 igbinary 序列化使用.",
+		},
+		{
+			Name: "igbinary", Display: "igbinary (二进制序列化, redis 依赖)", Type: "extension",
+			Versions: []string{"3.2.16", "3.2.15"}, Default: "3.2.16",
+			Note: "Redis / Memcached 的高效序列化后端.",
+		},
+		{
+			Name: "memcached", Display: "Memcached 客户端", Type: "extension",
+			Versions: []string{"3.3.0"}, Default: "3.3.0",
+			Deps: []string{"igbinary"},
+		},
+		{
+			Name: "mongodb", Display: "MongoDB 客户端", Type: "extension",
+			Versions: []string{"1.21.0", "1.20.1"}, Default: "1.21.0",
+		},
+		{
+			Name: "xdebug", Display: "Xdebug 调试器", Type: "zend_extension",
+			Versions: []string{"3.4.0", "3.3.2"}, Default: "3.4.0",
+			Note: "PHP 调试 + Profile. 启用后会拖慢, 仅开发用.",
+		},
+		{
+			Name: "imagick", Display: "Imagick (图像处理)", Type: "extension",
+			Versions: []string{"3.7.0"}, Default: "3.7.0",
+			Note: "需要先装 ImageMagick 主程序到系统 PATH.",
+		},
+	}
+}
+
+// detectPhpInfo 跑 php -v 解析版本和 VS 编译标签.
+func (p PHP) detectPhpInfo() (phpVer, vsTag string, err error) {
+	out, err := runHidden(p.ExePath(), 3*time.Second, "-v")
+	if err != nil {
+		return "", "", fmt.Errorf("php -v 失败: %w", err)
+	}
+	// 第一行: "PHP 8.3.14 (cli) (built: ...) (NTS Visual C++ 2019 x64)"
+	re := regexp.MustCompile(`PHP\s+(\d+\.\d+(?:\.\d+)?)`)
+	m := re.FindStringSubmatch(out)
+	if m == nil {
+		return "", "", fmt.Errorf("无法解析 PHP 版本: %s", strings.SplitN(out, "\n", 2)[0])
+	}
+	phpVer = m[1]
+	// VS 标签: PHP 8.4+ → vs17; 8.0-8.3 → vs16; 7.x → vc15
+	parts := strings.SplitN(phpVer, ".", 3)
+	mm := phpVer
+	if len(parts) >= 2 {
+		mm = parts[0] + "." + parts[1]
+	}
+	switch {
+	case strings.HasPrefix(mm, "8.4") || strings.HasPrefix(mm, "8.5"):
+		vsTag = "vs17"
+	case strings.HasPrefix(mm, "8."):
+		vsTag = "vs16"
+	case strings.HasPrefix(mm, "7."):
+		vsTag = "vc15"
+	default:
+		vsTag = "vs16"
+	}
+	return phpVer, vsTag, nil
+}
+
+// peclURL 按 PECL 命名规则构造 Windows zip 下载 URL.
+//   https://windows.php.net/downloads/pecl/releases/<name>/<ver>/
+//     php_<name>-<ver>-<phpMM>-nts-<vsTag>-x64.zip
+func peclURL(name, extVer, phpMM, vsTag string, ts bool) string {
+	tsTag := "nts"
+	if ts {
+		tsTag = "ts"
+	}
+	return fmt.Sprintf(
+		"https://windows.php.net/downloads/pecl/releases/%s/%s/php_%s-%s-%s-%s-%s-x64.zip",
+		name, extVer, name, extVer, phpMM, tsTag, vsTag,
+	)
+}
+
+// InstallExtensionFromPECL 从 PECL 下载并安装一个 PHP 扩展.
+// 流程: 检测 php 版本 → 构造 URL → 下载 zip → 解压所有 *.dll 到 ext/ → 改 php.ini.
+// 重启 PHP-CGI 才生效.
+func (p PHP) InstallExtensionFromPECL(ctx context.Context, name, extVer string, prog download.ProgressFn) error {
+	if _, err := os.Stat(p.ExePath()); err != nil {
+		return fmt.Errorf("PHP 未安装, 请先到首页安装 PHP")
+	}
+	phpVer, vsTag, err := p.detectPhpInfo()
+	if err != nil {
+		return err
+	}
+	parts := strings.SplitN(phpVer, ".", 3)
+	phpMM := phpVer
+	if len(parts) >= 2 {
+		phpMM = parts[0] + "." + parts[1]
+	}
+
+	// 下载: 先试 nts, 失败试 ts (用户装的可能是 ts)
+	tmpZip := filepath.Join(paths.TmpDir, "php_ext_"+name+"_"+extVer+".zip")
+	urls := []string{
+		peclURL(name, extVer, phpMM, vsTag, false),
+		peclURL(name, extVer, phpMM, vsTag, true),
+	}
+	if err := download.DownloadWithRetry(ctx, urls, tmpZip, prog, 2); err != nil {
+		return fmt.Errorf("下载扩展失败: %w\n常见原因: 该版本对你的 PHP %s (%s) 不可用, 换个版本试试", err, phpVer, vsTag)
+	}
+	defer os.Remove(tmpZip)
+
+	// 解压到临时目录, 然后只挑 *.dll 拷到 ext/
+	extractDir := filepath.Join(paths.TmpDir, "php_ext_extract_"+name)
+	_ = os.RemoveAll(extractDir)
+	if err := extract.Zip(tmpZip, extractDir, ""); err != nil {
+		return fmt.Errorf("解压失败: %w", err)
+	}
+	defer os.RemoveAll(extractDir)
+
+	extDir := filepath.Join(paths.PhpDir, "ext")
+	if err := os.MkdirAll(extDir, 0o755); err != nil {
+		return err
+	}
+	var copied []string
+	_ = filepath.Walk(extractDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info == nil || info.IsDir() {
+			return nil
+		}
+		n := info.Name()
+		if !strings.HasSuffix(strings.ToLower(n), ".dll") {
+			return nil
+		}
+		// 跳过非 php_ 开头的 (有的 zip 带 readline / phpdbg 之类无关 dll)
+		// 但 imagick 之类会带 CORE_RL_*.dll 也是需要的, 所以宽松判断: 只跳过 php_engine 本身
+		dst := filepath.Join(extDir, n)
+		if err := copyOne(path, dst); err != nil {
+			logger.Warn("拷贝 %s 失败: %v", n, err)
+			return nil
+		}
+		copied = append(copied, n)
+		return nil
+	})
+	if len(copied) == 0 {
+		return fmt.Errorf("zip 内没找到 *.dll, 可能包结构异常")
+	}
+	logger.Info("PHP 扩展 %s %s 已装: %v", name, extVer, copied)
+
+	// 改 php.ini 启用主扩展
+	if err := p.SetExtension(name, true); err != nil {
+		return fmt.Errorf("写 php.ini 失败: %w", err)
+	}
+	return nil
+}
+
+func copyOne(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
+}
