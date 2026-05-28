@@ -69,6 +69,33 @@ const wallpaperUrl = ref('')
 provide('wallpaperUrl', wallpaperUrl)
 provide('setWallpaperUrl', (u) => { wallpaperUrl.value = u || '' })
 
+// 主题切换 (applied = {info:{id,name,...}, css:""}, css 非空时注入自定义主题)
+const currentThemeId = ref('default')
+provide('currentThemeId', currentThemeId)
+function applyTheme(applied) {
+  if (!applied || !applied.info) return
+  currentThemeId.value = applied.info.id
+  // 内置主题用 data-theme 属性切换 CSS 变量
+  const id = applied.info.id
+  if (id === 'default') {
+    document.documentElement.removeAttribute('data-theme')
+  } else if (id === 'blue-classic') {
+    document.documentElement.setAttribute('data-theme', 'blue-classic')
+  } else {
+    // 自定义主题: 用 data-theme=custom 标记 + 注入 CSS
+    document.documentElement.setAttribute('data-theme', 'custom')
+  }
+  // 注入自定义 CSS (有 css 字段时)
+  let styleEl = document.getElementById('theme-custom')
+  if (!styleEl) {
+    styleEl = document.createElement('style')
+    styleEl.id = 'theme-custom'
+    document.head.appendChild(styleEl)
+  }
+  styleEl.textContent = applied.css || ''
+}
+provide('applyTheme', applyTheme)
+
 // 通过 window.go.main.App.* 调用后端
 const api = window.go?.main?.App || {}
 provide('api', api)
@@ -102,6 +129,14 @@ onMounted(async () => {
     if (api.GetWallpaper) {
       const wp = await api.GetWallpaper()
       if (wp && !wp.empty && wp.dataUrl) wallpaperUrl.value = wp.dataUrl
+    }
+  } catch (e) { /* ignore */ }
+
+  // 加载持久化的主题
+  try {
+    if (api.GetCurrentTheme) {
+      const applied = await api.GetCurrentTheme()
+      if (applied) applyTheme(applied)
     }
   } catch (e) { /* ignore */ }
 

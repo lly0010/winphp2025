@@ -16,6 +16,7 @@ type State struct {
 	PgVersion    string `json:"pgVersion"`
 	PgInited     bool   `json:"pgInited"`
 	RedisVersion string `json:"redisVersion"`
+	Theme        string `json:"theme,omitempty"` // 当前主题 id (default / blue-classic / custom:xxx)
 }
 
 type Site struct {

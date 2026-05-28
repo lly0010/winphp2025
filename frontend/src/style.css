@@ -1,5 +1,12 @@
+/* ===== 默认主题: 粉紫二次元 =====
+ * 用 data-theme 属性切换不同主题. 内置:
+ *   (无)               = default 粉紫
+ *   data-theme="blue-classic" = 蓝色商务
+ *   data-theme="custom"       = 自定义 (CSS 由 <style id="theme-custom"> 注入覆盖)
+ *
+ * 第三方主题: 放 themes/<name>/theme.css, 通过 CSS 变量覆盖, 见 themes/example/
+ */
 :root {
-  /* 二次元粉紫主题 */
   --primary: #ff6f9e;
   --primary-dark: #e54d80;
   --primary-light: #ffe5ef;
@@ -26,6 +33,31 @@
   /* 侧边栏渐变 (深紫到粉紫) */
   --sidebar-bg: linear-gradient(180deg, #2d1f4d 0%, #3b2766 50%, #4a2f6e 100%);
   --header-grad: linear-gradient(135deg, #ff6f9e 0%, #b06fff 100%);
+}
+
+/* ===== 内置主题: 蓝色商务 (原 v1.x 经典色) ===== */
+[data-theme="blue-classic"] {
+  --primary: #2d74b8;
+  --primary-dark: #1e5a92;
+  --primary-light: #e8f1fa;
+  --accent: #4a90d8;
+  --accent-light: #d6e7f5;
+
+  --bg: #f7f8fa;
+  --bg-card: #ffffff;
+  --border: #e3e6ea;
+  --border-soft: rgba(45, 116, 184, 0.15);
+
+  --text: #2d3742;
+  --text-secondary: #6b7785;
+
+  --shadow: 0 1px 3px rgba(0,0,0,0.04), 0 2px 12px rgba(0,0,0,0.05);
+  --shadow-hover: 0 4px 14px rgba(0,0,0,0.10), 0 10px 32px rgba(0,0,0,0.08);
+  --radius: 8px;
+  --radius-lg: 10px;
+
+  --sidebar-bg: linear-gradient(180deg, #1f2937 0%, #2c3e50 100%);
+  --header-grad: linear-gradient(135deg, #2d74b8 0%, #1e5a92 100%);
 }
 
 * { box-sizing: border-box; }

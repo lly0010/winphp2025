@@ -20,6 +20,7 @@ var (
 	TmpDir    string // tmp
 	ConfigDir string // config
 	TplDir    string // config/templates
+	ThemesDir string // themes/  (第三方主题包)
 
 	SitesFile  string // config/sites.json
 	StateFile  string // config/state.json
@@ -52,6 +53,7 @@ func Init() error {
 	TmpDir = filepath.Join(Root, "tmp")
 	ConfigDir = filepath.Join(Root, "config")
 	TplDir = filepath.Join(ConfigDir, "templates")
+	ThemesDir = filepath.Join(Root, "themes")
 
 	SitesFile = filepath.Join(ConfigDir, "sites.json")
 	StateFile = filepath.Join(ConfigDir, "state.json")
@@ -64,7 +66,7 @@ func Init() error {
 	}
 
 	// 初始化目录
-	dirs := []string{BinDir, WwwDir, LogsDir, TmpDir, ConfigDir, TplDir, filepath.Join(WwwDir, "default")}
+	dirs := []string{BinDir, WwwDir, LogsDir, TmpDir, ConfigDir, TplDir, ThemesDir, filepath.Join(WwwDir, "default")}
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return err

@@ -24,6 +24,7 @@ import (
 	"github.com/lly0010/winphp2025/internal/sites"
 	"github.com/lly0010/winphp2025/internal/sources"
 	"github.com/lly0010/winphp2025/internal/state"
+	"github.com/lly0010/winphp2025/internal/theme"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -86,6 +87,9 @@ func (a *App) CancelInstall(kind string) {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	logger.Info("WinPHP 启动, 根目录: %s", paths.Root)
+
+	// 首次启动写入主题示例 (themes/example/ 给开发者参考)
+	theme.EnsureSampleTheme()
 
 	// 订阅日志推送到前端
 	logCh := logger.Subscribe()
@@ -872,6 +876,55 @@ func (a *App) OpenFolder(p string) error {
 		return err
 	}
 	return execOpen(p)
+}
+
+// ============ 主题 ============
+
+// ListThemes 列出所有可用主题 (内置 + themes/ 目录里的自定义).
+func (a *App) ListThemes() []theme.Info {
+	return theme.List()
+}
+
+// GetCurrentTheme 返回当前应用的主题 (含 CSS 给前端注入).
+// 启动时调一次, 应用持久化的主题.
+func (a *App) GetCurrentTheme() theme.Applied {
+	st := state.Load()
+	id := st.Theme
+	if id == "" {
+		id = "default"
+	}
+	applied, err := theme.Get(id)
+	if err != nil {
+		// 主题被删了, fallback default
+		applied, _ = theme.Get("default")
+	}
+	return applied
+}
+
+// SetTheme 切换主题. 持久化到 state.
+func (a *App) SetTheme(id string) (theme.Applied, error) {
+	if !theme.ValidID(id) {
+		return theme.Applied{}, fmt.Errorf("非法主题 id: %s", id)
+	}
+	applied, err := theme.Get(id)
+	if err != nil {
+		return theme.Applied{}, err
+	}
+	st := state.Load()
+	st.Theme = id
+	_ = state.Save(st)
+	logger.Info("切换主题: %s (%s)", applied.Info.Name, id)
+	return applied, nil
+}
+
+// RemoveCustomTheme 删除一个自定义主题目录 (不能删内置).
+func (a *App) RemoveCustomTheme(id string) error {
+	return theme.RemoveCustom(id)
+}
+
+// OpenThemesFolder 打开 themes/ 目录给开发者放主题包.
+func (a *App) OpenThemesFolder() error {
+	return execOpen(paths.ThemesDir)
 }
 
 // ============ 壁纸 (二次元美化) ============

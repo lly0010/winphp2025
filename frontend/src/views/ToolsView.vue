@@ -62,18 +62,25 @@
         <div class="t1">移除壁纸</div>
         <div class="t2">恢复默认背景</div>
       </button>
+      <button class="tool-btn theme-btn" @click="themeOpen = true">
+        <div class="t1">🎨 切换主题</div>
+        <div class="t2">内置粉紫/蓝色, 支持第三方主题包</div>
+      </button>
     </div>
     <ConfigEditor v-if="hostsOpen" ckey="hosts" title="hosts" @close="hostsOpen = false" />
+    <ThemeDialog v-if="themeOpen" @close="themeOpen = false" />
   </div>
 </template>
 
 <script setup>
 import { inject, ref, computed } from 'vue'
 import ConfigEditor from '../components/ConfigEditor.vue'
+import ThemeDialog from '../components/ThemeDialog.vue'
 const api = inject('api')
 const setWallpaperUrl = inject('setWallpaperUrl', () => {})
 const wallpaperUrl = inject('wallpaperUrl', ref(''))
 const hostsOpen = ref(false)
+const themeOpen = ref(false)
 const hasWallpaper = computed(() => !!wallpaperUrl.value)
 
 async function pickWallpaper() {
@@ -143,6 +150,13 @@ async function checkPort(n) {
 }
 .tool-btn.wallpaper-btn:hover {
   background: linear-gradient(135deg, #ffd6e6, #ead4ff);
+}
+.tool-btn.theme-btn {
+  background: linear-gradient(135deg, #e8f1fa, #f3e8ff);
+  border-color: rgba(176, 111, 255, 0.30);
+}
+.tool-btn.theme-btn:hover {
+  background: linear-gradient(135deg, #d6e7f5, #ead4ff);
 }
 .t1 { font-weight: 600; color: var(--text); margin-bottom: 4px; }
 .t2 { font-size: 12px; color: var(--text-secondary); }
