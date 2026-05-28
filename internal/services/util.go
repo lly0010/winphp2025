@@ -16,9 +16,18 @@ import (
 // runHidden 执行命令, 隐藏窗口, 合并 stdout+stderr, 超时杀掉.
 // 子进程在中文 Windows 上写 stderr 用 GBK codepage, textenc.ToUTF8 自动检测转码.
 func runHidden(name string, timeout time.Duration, args ...string) (string, error) {
+	return runHiddenIn("", name, timeout, args...)
+}
+
+// runHiddenIn 同上, 但能指定子进程工作目录 (cmd.Dir).
+// nginx 在 Windows 上拼接 -p 路径有混合斜杠 bug, 用 cwd 代替 -p 更稳.
+func runHiddenIn(workDir, name string, timeout time.Duration, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
+	if workDir != "" {
+		cmd.Dir = workDir
+	}
 	hideWindow(cmd)
 	var buf bytes.Buffer
 	cmd.Stdout = &buf

@@ -94,8 +94,13 @@ func (n Nginx) Start() error {
 			return fmt.Errorf("nginx.conf 仍不存在 (%s), 请检查 bin/nginx/conf 目录权限或重装", confFile)
 		}
 	}
-	// 配置语法测试
-	if out, err := runHidden(exe, 5*time.Second, "-t", "-p", winshort.Short(paths.NginxDir)); err != nil {
+	// 配置语法测试.
+	// 注意: 不传 -p 参数, 改用工作目录 (cmd.Dir = winshort), 让 nginx 自己
+	// 用 cwd 作 prefix. nginx 对 -p 后路径的混合斜杠拼接有 bug
+	// ("bin\\nginx" + "conf/nginx.conf" => "bin\\nginx\\conf/nginx.conf"),
+	// 走 cwd 完全规避.
+	nginxShort := winshort.Short(paths.NginxDir)
+	if out, err := runHiddenIn(nginxShort, exe, 5*time.Second, "-t"); err != nil {
 		return fmt.Errorf("nginx -t 失败: %v\n%s", err, out)
 	}
 
@@ -104,9 +109,8 @@ func (n Nginx) Start() error {
 			return fmt.Errorf("service start: %w", err)
 		}
 	} else {
-		// 用短路径解决中文目录启动失败 (nginx fopen 在 ANSI codepage 下不支持 unicode)
-		nginxShort := winshort.Short(paths.NginxDir)
-		cmd := exec.Command(exe, "-p", nginxShort)
+		// 用工作目录代替 -p 解决中文目录启动失败 + 路径斜杠混合 bug
+		cmd := exec.Command(exe)
 		cmd.Dir = nginxShort
 		hideWindow(cmd)
 		if err := cmd.Start(); err != nil {
@@ -168,7 +172,7 @@ func (n Nginx) Stop() error {
 	}
 	exe := n.ExePath()
 	if _, err := os.Stat(exe); err == nil && proc.HasProcessByPathPrefix("nginx", paths.NginxDir) {
-		_, _ = runHidden(exe, 5*time.Second, "-s", "stop", "-p", winshort.Short(paths.NginxDir))
+		_, _ = runHiddenIn(winshort.Short(paths.NginxDir), exe, 5*time.Second, "-s", "stop")
 	}
 	time.Sleep(400 * time.Millisecond)
 	// 强杀残留
@@ -188,13 +192,14 @@ func (n Nginx) Reload() error {
 	if _, err := os.Stat(exe); err != nil {
 		return fmt.Errorf("Nginx 未安装")
 	}
-	if out, err := runHidden(exe, 5*time.Second, "-t", "-p", winshort.Short(paths.NginxDir)); err != nil {
+	wd := winshort.Short(paths.NginxDir)
+	if out, err := runHiddenIn(wd, exe, 5*time.Second, "-t"); err != nil {
 		return fmt.Errorf("nginx -t: %v\n%s", err, out)
 	}
 	if !proc.HasProcessByPathPrefix("nginx", paths.NginxDir) {
 		return fmt.Errorf("Nginx 未运行")
 	}
-	_, _ = runHidden(exe, 5*time.Second, "-s", "reload", "-p", winshort.Short(paths.NginxDir))
+	_, _ = runHiddenIn(wd, exe, 5*time.Second, "-s", "reload")
 	logger.Info("Nginx 已 reload")
 	return nil
 }
