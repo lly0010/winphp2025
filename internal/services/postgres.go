@@ -33,15 +33,18 @@ func (p Postgres) Version() string {
 		return ""
 	}
 	out, err := runHidden(p.ExePath(), 3*time.Second, "--version")
-	if err != nil {
-		return ""
-	}
-	// "postgres (PostgreSQL) 17.2"
-	parts := strings.Fields(out)
-	for _, w := range parts {
-		if len(w) > 0 && (w[0] >= '0' && w[0] <= '9') {
-			return strings.TrimSpace(w)
+	if err == nil {
+		// "postgres (PostgreSQL) 17.2"
+		parts := strings.Fields(out)
+		for _, w := range parts {
+			if len(w) > 0 && (w[0] >= '0' && w[0] <= '9') {
+				return strings.TrimSpace(w)
+			}
 		}
+	}
+	// postgres.exe 跑不起来 (常见: 缺 VC++ Redist) 或输出异常, 回退 state 里的版本号
+	if st := state.Load(); st.PgVersion != "" {
+		return st.PgVersion
 	}
 	return ""
 }

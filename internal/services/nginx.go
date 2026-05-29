@@ -12,6 +12,7 @@ import (
 	"github.com/lly0010/winphp2025/internal/paths"
 	"github.com/lly0010/winphp2025/internal/portcheck"
 	"github.com/lly0010/winphp2025/internal/proc"
+	"github.com/lly0010/winphp2025/internal/state"
 	"github.com/lly0010/winphp2025/internal/winshort"
 )
 
@@ -30,18 +31,21 @@ func (n Nginx) Version() string {
 		return ""
 	}
 	out, err := runHidden(n.ExePath(), 3*time.Second, "-v")
-	if err != nil {
-		return ""
-	}
-	// nginx writes to stderr; runHidden returns combined
-	const prefix = "nginx/"
-	if i := strings.Index(out, prefix); i >= 0 {
-		s := out[i+len(prefix):]
-		end := strings.IndexAny(s, " \r\n\t")
-		if end > 0 {
-			return s[:end]
+	if err == nil {
+		// nginx writes to stderr; runHidden returns combined
+		const prefix = "nginx/"
+		if i := strings.Index(out, prefix); i >= 0 {
+			s := out[i+len(prefix):]
+			end := strings.IndexAny(s, " \r\n\t")
+			if end > 0 {
+				return s[:end]
+			}
+			return strings.TrimSpace(s)
 		}
-		return strings.TrimSpace(s)
+	}
+	// nginx.exe 跑不起来 (常见: 缺 VC++ Redist) 或输出异常, 回退 state 里的版本号
+	if st := state.Load(); st.NginxVersion != "" {
+		return st.NginxVersion
 	}
 	return ""
 }

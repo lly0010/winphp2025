@@ -12,6 +12,7 @@ import (
 	"github.com/lly0010/winphp2025/internal/paths"
 	"github.com/lly0010/winphp2025/internal/portcheck"
 	"github.com/lly0010/winphp2025/internal/proc"
+	"github.com/lly0010/winphp2025/internal/state"
 )
 
 const RedisServiceName = "WinPHPRedis"
@@ -28,16 +29,19 @@ func (r Redis) Version() string {
 		return ""
 	}
 	out, err := runHidden(r.ExePath(), 3*time.Second, "--version")
-	if err != nil {
-		return ""
-	}
-	// "Redis server v=5.0.14.1 sha=..." 抓 v= 后的版本号
-	if i := strings.Index(out, "v="); i >= 0 {
-		s := out[i+2:]
-		end := strings.IndexAny(s, " \r\n\t")
-		if end > 0 {
-			return s[:end]
+	if err == nil {
+		// "Redis server v=5.0.14.1 sha=..." 抓 v= 后的版本号
+		if i := strings.Index(out, "v="); i >= 0 {
+			s := out[i+2:]
+			end := strings.IndexAny(s, " \r\n\t")
+			if end > 0 {
+				return s[:end]
+			}
 		}
+	}
+	// redis-server.exe 跑不起来 (常见: 缺 VC++ Redist) 或输出异常, 回退 state 里的版本号
+	if st := state.Load(); st.RedisVersion != "" {
+		return st.RedisVersion
 	}
 	return ""
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/lly0010/winphp2025/internal/paths"
 	"github.com/lly0010/winphp2025/internal/portcheck"
 	"github.com/lly0010/winphp2025/internal/proc"
+	"github.com/lly0010/winphp2025/internal/state"
 )
 
 const PhpServiceName = "WinPHPPhp"
@@ -28,16 +29,20 @@ func (p PHP) Version() string {
 		return ""
 	}
 	out, err := runHidden(p.ExePath(), 3*time.Second, "-v")
-	if err != nil {
-		return ""
-	}
-	// First line: "PHP 8.3.14 (cli) ..."
-	if i := strings.Index(out, "PHP "); i >= 0 {
-		s := out[i+4:]
-		end := strings.IndexAny(s, " \r\n\t")
-		if end > 0 {
-			return s[:end]
+	if err == nil {
+		// First line: "PHP 8.3.14 (cli) ..."
+		if i := strings.Index(out, "PHP "); i >= 0 {
+			s := out[i+4:]
+			end := strings.IndexAny(s, " \r\n\t")
+			if end > 0 {
+				return s[:end]
+			}
 		}
+	}
+	// php.exe 跑不起来 (常见: 缺 VC++ 2022 Redistributable),
+	// 或者输出格式异常. 回退到安装时写入 state 的版本号.
+	if st := state.Load(); st.PhpVersion != "" {
+		return st.PhpVersion
 	}
 	return ""
 }

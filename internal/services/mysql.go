@@ -33,15 +33,18 @@ func (m MySQL) Version() string {
 		return ""
 	}
 	out, err := runHidden(m.ExePath(), 3*time.Second, "--version")
-	if err != nil {
-		return ""
-	}
-	if i := strings.Index(out, "Ver "); i >= 0 {
-		s := out[i+4:]
-		end := strings.IndexAny(s, " \r\n\t-")
-		if end > 0 {
-			return s[:end]
+	if err == nil {
+		if i := strings.Index(out, "Ver "); i >= 0 {
+			s := out[i+4:]
+			end := strings.IndexAny(s, " \r\n\t-")
+			if end > 0 {
+				return s[:end]
+			}
 		}
+	}
+	// mysqld.exe 跑不起来 (常见: 缺 VC++ Redist) 或输出异常, 回退 state 里的版本号
+	if st := state.Load(); st.MysqlVersion != "" {
+		return st.MysqlVersion
 	}
 	return ""
 }
