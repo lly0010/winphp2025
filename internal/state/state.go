@@ -17,6 +17,12 @@ type State struct {
 	PgInited     bool   `json:"pgInited"`
 	RedisVersion string `json:"redisVersion"`
 	Theme        string `json:"theme,omitempty"` // 当前主题 id (default / blue-classic / custom:xxx)
+
+	// PHP 防跨盘访问 (open_basedir 限制).
+	// 启用后 PHP 脚本只能在 www + php 自身目录 + 用户额外允许目录里读写,
+	// 不会被可道云/文件管理器类应用自动挂载 C 盘.
+	OpenBasedir      bool     `json:"openBasedir,omitempty"`
+	OpenBasedirExtra []string `json:"openBasedirExtra,omitempty"`
 }
 
 type Site struct {

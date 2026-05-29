@@ -689,6 +689,80 @@ func (a *App) PhpSetExtension(name string, enable bool) error {
 	return nil
 }
 
+// ============ PHP 防跨盘访问 (open_basedir) ============
+
+// OpenBasedirInfo 给前端展示当前配置 + 生效后的完整路径列表.
+type OpenBasedirInfo struct {
+	Enabled        bool     `json:"enabled"`        // 是否启用 open_basedir 限制
+	Extra          []string `json:"extra"`          // 用户配置的额外允许目录
+	EffectivePaths []string `json:"effectivePaths"` // 实际会写入 ini 的完整列表
+	AlwaysPaths    []string `json:"alwaysPaths"`    // 始终允许 (www + php + tmp) 不可改
+}
+
+// GetOpenBasedir 返回 PHP 防跨盘访问当前配置.
+func (a *App) GetOpenBasedir() OpenBasedirInfo {
+	st := state.Load()
+	always := []string{
+		filepath.ToSlash(paths.WwwDir) + "/",
+		filepath.ToSlash(paths.PhpDir) + "/",
+		filepath.ToSlash(paths.TmpDir) + "/",
+	}
+	return OpenBasedirInfo{
+		Enabled:        st.OpenBasedir,
+		Extra:          st.OpenBasedirExtra,
+		EffectivePaths: a.php.OpenBasedirPaths(),
+		AlwaysPaths:    always,
+	}
+}
+
+// SetOpenBasedir 写入 state + 同步到 php.ini. 需要重启 PHP-CGI 才生效.
+// extra 里每行一个路径 (例如 "D:\\", "E:\\data\\"). 空行会被清掉.
+func (a *App) SetOpenBasedir(enabled bool, extra []string) error {
+	clean := make([]string, 0, len(extra))
+	seen := map[string]bool{}
+	for _, e := range extra {
+		e = strings.TrimSpace(e)
+		if e == "" {
+			continue
+		}
+		key := strings.ToLower(filepath.ToSlash(e))
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		clean = append(clean, e)
+	}
+	st := state.Load()
+	st.OpenBasedir = enabled
+	st.OpenBasedirExtra = clean
+	if err := state.Save(st); err != nil {
+		return err
+	}
+	if _, err := os.Stat(a.php.IniPath()); err != nil {
+		// PHP 没装就只存 state, 装完后 InitConfig 会自动应用
+		logger.Info("PHP 未安装, 防跨盘配置已保存 state, 装完 PHP 自动生效")
+		return nil
+	}
+	if err := a.php.ApplyOpenBasedir(); err != nil {
+		return err
+	}
+	logger.Info("PHP 防跨盘 open_basedir -> %v (重启 PHP-CGI 生效)", enabled)
+	return nil
+}
+
+// ListNonSystemDrives 枚举本机所有非 C 盘的可用盘符 (D:\ E:\ ...).
+// 前端 "一键添加非 C 盘" 按钮调用, 把这些盘加进 OpenBasedirExtra.
+func (a *App) ListNonSystemDrives() []string {
+	var drives []string
+	for c := 'D'; c <= 'Z'; c++ {
+		p := string(c) + ":\\"
+		if _, err := os.Stat(p); err == nil {
+			drives = append(drives, p)
+		}
+	}
+	return drives
+}
+
 // PhpInstallableExts 返回可在线安装的 PHP 扩展清单 (内置常用: redis, memcached, mongodb, xdebug ...).
 func (a *App) PhpInstallableExts() []services.InstallableExt {
 	return services.KnownInstallableExts()

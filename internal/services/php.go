@@ -186,7 +186,7 @@ session.cookie_httponly = 1
 session.cookie_samesite = "Lax"
 `
 
-func (PHP) InitConfig() error {
+func (p PHP) InitConfig() error {
 	if _, err := os.Stat(paths.PhpDir); err != nil {
 		return err
 	}
@@ -197,6 +197,10 @@ func (PHP) InitConfig() error {
 	}
 	for _, d := range []string{"logs", "tmp"} {
 		_ = os.MkdirAll(filepath.Join(paths.PhpDir, d), 0o755)
+	}
+	// 重新生成后把 open_basedir 配置再写回去 (用户开过就保留)
+	if state.Load().OpenBasedir {
+		_ = p.ApplyOpenBasedir()
 	}
 	logger.Info("PHP 配置初始化完成")
 	return nil
@@ -252,6 +256,80 @@ func (p PHP) ListExtensions() []Extension {
 		exts = append(exts, Extension{Name: short, Enabled: ok, Type: typ})
 	}
 	return exts
+}
+
+// OpenBasedirPaths 计算当前应该写入 open_basedir 的所有路径.
+// 始终允许: www 根 + php 安装目录 (扩展/会话/日志) + 全局 tmp.
+// 额外: state 里用户配置的 OpenBasedirExtra (如 D:\ E:\data\).
+// 路径都以斜杠结尾, 防止前缀匹配越权 (php open_basedir 是前缀匹配).
+func (p PHP) OpenBasedirPaths() []string {
+	var ps []string
+	seen := map[string]bool{}
+	add := func(raw string) {
+		s := strings.TrimSpace(raw)
+		if s == "" {
+			return
+		}
+		s = filepath.ToSlash(s)
+		s = strings.TrimRight(s, "/")
+		if s == "" {
+			return
+		}
+		s += "/"
+		key := strings.ToLower(s)
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		ps = append(ps, s)
+	}
+	add(paths.WwwDir)
+	add(paths.PhpDir)
+	add(paths.TmpDir)
+	for _, e := range state.Load().OpenBasedirExtra {
+		add(e)
+	}
+	return ps
+}
+
+// ApplyOpenBasedir 把 state 里的 OpenBasedir 开关同步到 php.ini.
+// 启用: 写一行 open_basedir = "<路径列表>" 进 [PHP] 段 (替换已有的).
+// 禁用: 删掉所有 open_basedir 行.
+// 需要重启 PHP-CGI 才生效.
+func (p PHP) ApplyOpenBasedir() error {
+	iniPath := p.IniPath()
+	text, err := readFileAll(iniPath)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(text, "\n")
+	kept := make([]string, 0, len(lines))
+	for _, l := range lines {
+		body := strings.TrimLeft(strings.TrimSpace(l), "; \t")
+		if strings.HasPrefix(body, "open_basedir") {
+			continue
+		}
+		kept = append(kept, l)
+	}
+	if state.Load().OpenBasedir {
+		ps := p.OpenBasedirPaths()
+		line := `open_basedir = "` + strings.Join(ps, ";") + `"`
+		// 优先插到 [PHP] 段下一行, 找不到就追加到文件末尾
+		inserted := false
+		out := make([]string, 0, len(kept)+1)
+		for _, l := range kept {
+			out = append(out, l)
+			if !inserted && strings.TrimSpace(l) == "[PHP]" {
+				out = append(out, line)
+				inserted = true
+			}
+		}
+		if !inserted {
+			out = append(out, line)
+		}
+		kept = out
+	}
+	return os.WriteFile(iniPath, []byte(strings.Join(kept, "\n")), 0o644)
 }
 
 // SetExtension 启用/禁用扩展. 修改 php.ini 内的 ;extension=xxx 行.

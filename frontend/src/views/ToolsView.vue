@@ -70,6 +70,10 @@
         <div class="t1">📦 数据目录</div>
         <div class="t2 t2-data">{{ dataDirShort }}</div>
       </button>
+      <button class="tool-btn basedir-btn" @click="openBasedir">
+        <div class="t1">🛡 PHP 防跨盘</div>
+        <div class="t2">{{ basedirInfo.enabled ? '已启用, 点击调整' : '未开启 (可道云等会挂 C 盘)' }}</div>
+      </button>
     </div>
 
     <!-- 数据目录对话框 -->
@@ -98,6 +102,49 @@
       </div>
     </div>
 
+    <!-- PHP 防跨盘对话框 -->
+    <div v-if="basedirOpen" class="modal-mask" @click.self="basedirOpen = false">
+      <div class="modal" style="width: 640px">
+        <div class="modal-header">PHP 防跨盘访问 (open_basedir)</div>
+        <div class="modal-body">
+          <label class="basedir-toggle">
+            <input type="checkbox" v-model="basedirEnabled" />
+            <span>启用 PHP 目录访问限制</span>
+          </label>
+          <p class="hint">
+            启用后 PHP 脚本 (如可道云 / 文件管理器) 只能访问下面列出的目录,
+            不会自动挂 C 盘整盘. <strong>www 目录始终允许</strong> (网站在 C 盘也能正常跑).
+            关掉后无限制.
+          </p>
+          <div class="paths-block">
+            <div class="lbl">始终允许 (网站 + PHP 自身, 不可改)</div>
+            <code v-for="p in basedirInfo.alwaysPaths" :key="p" class="path-row">{{ p }}</code>
+          </div>
+          <div class="paths-block">
+            <div class="lbl-row">
+              <div class="lbl">额外允许目录 (每行一个, 如 D:\ 或 E:\data\)</div>
+              <button class="mini-btn" @click="addNonSystemDrives" :disabled="basedirSaving">+ 一键添加非 C 盘</button>
+            </div>
+            <textarea
+              v-model="extraText"
+              rows="5"
+              placeholder="D:\&#10;E:\data\&#10;F:\backup\"
+              :disabled="basedirSaving"
+            ></textarea>
+            <div class="tiny">路径结尾自动补斜杠. 写 <code>D:\</code> 等于允许整个 D 盘.</div>
+          </div>
+          <div v-if="basedirMsg" :class="['msg', basedirMsgErr ? 'err' : 'ok']">{{ basedirMsg }}</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" @click="basedirOpen = false" :disabled="basedirSaving">关闭</button>
+          <button class="btn" @click="saveBasedir(false)" :disabled="basedirSaving">仅保存</button>
+          <button class="btn primary" @click="saveBasedir(true)" :disabled="basedirSaving">
+            {{ basedirSaving ? '应用中...' : '保存并重启 PHP-CGI' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <ConfigEditor v-if="hostsOpen" ckey="hosts" title="hosts" @close="hostsOpen = false" />
     <ThemeDialog v-if="themeOpen" @close="themeOpen = false" />
   </div>
@@ -113,6 +160,13 @@ const wallpaperUrl = inject('wallpaperUrl', ref(''))
 const hostsOpen = ref(false)
 const themeOpen = ref(false)
 const dataDirOpen = ref(false)
+const basedirOpen = ref(false)
+const basedirInfo = ref({ enabled: false, extra: [], effectivePaths: [], alwaysPaths: [] })
+const basedirEnabled = ref(false)
+const extraText = ref('')
+const basedirSaving = ref(false)
+const basedirMsg = ref('')
+const basedirMsgErr = ref(false)
 const dataInfo = ref({ current: '', exeDir: '', pointerExist: false, pointerPath: '' })
 const msg = ref('')
 const msgKind = ref('ok')
@@ -129,8 +183,73 @@ async function loadDataInfo() {
   try { dataInfo.value = await api.GetDataDirInfo() || dataInfo.value }
   catch { /* ignore */ }
 }
-onMounted(loadDataInfo)
+async function loadBasedir() {
+  try {
+    const info = await api.GetOpenBasedir()
+    if (info) {
+      basedirInfo.value = info
+      basedirEnabled.value = !!info.enabled
+      extraText.value = (info.extra || []).join('\n')
+    }
+  } catch { /* ignore */ }
+}
+onMounted(() => { loadDataInfo(); loadBasedir() })
 watch(dataDirOpen, v => { if (v) { msg.value = ''; loadDataInfo() } })
+
+async function openBasedir() {
+  basedirMsg.value = ''
+  basedirMsgErr.value = false
+  await loadBasedir()
+  basedirOpen.value = true
+}
+
+async function addNonSystemDrives() {
+  try {
+    const drives = await api.ListNonSystemDrives() || []
+    if (!drives.length) {
+      basedirMsg.value = '没检测到 C 盘以外的盘符'
+      basedirMsgErr.value = true
+      return
+    }
+    const cur = extraText.value.split('\n').map(s => s.trim()).filter(Boolean)
+    const have = new Set(cur.map(s => s.toLowerCase().replace(/\\/g, '/')))
+    for (const d of drives) {
+      if (!have.has(d.toLowerCase().replace(/\\/g, '/'))) cur.push(d)
+    }
+    extraText.value = cur.join('\n')
+    basedirMsg.value = '已加入: ' + drives.join(', ')
+    basedirMsgErr.value = false
+  } catch (e) {
+    basedirMsg.value = '失败: ' + e
+    basedirMsgErr.value = true
+  }
+}
+
+async function saveBasedir(restart) {
+  basedirSaving.value = true
+  basedirMsg.value = ''
+  try {
+    const extra = extraText.value.split('\n').map(s => s.trim()).filter(Boolean)
+    await api.SetOpenBasedir(basedirEnabled.value, extra)
+    await loadBasedir()
+    if (restart) {
+      try {
+        await api.RestartService('php')
+        basedirMsg.value = '✓ 已保存并重启 PHP-CGI, 现在生效.'
+      } catch (e) {
+        basedirMsg.value = '✓ 已保存. PHP-CGI 重启失败: ' + e + ' (可去首页手动重启)'
+      }
+    } else {
+      basedirMsg.value = '✓ 已保存. 重启 PHP-CGI 后生效.'
+    }
+    basedirMsgErr.value = false
+  } catch (e) {
+    basedirMsg.value = '失败: ' + e
+    basedirMsgErr.value = true
+  } finally {
+    basedirSaving.value = false
+  }
+}
 
 async function pickDataDir() {
   msg.value = ''
@@ -243,6 +362,42 @@ async function checkPort(n) {
 .tool-btn.data-btn:hover {
   background: linear-gradient(135deg, #fff3cf, #ffe0a8);
 }
+.tool-btn.basedir-btn {
+  background: linear-gradient(135deg, #e6f7ec, #e6f0fa);
+  border-color: rgba(95, 203, 111, 0.40);
+}
+.tool-btn.basedir-btn:hover {
+  background: linear-gradient(135deg, #d6efdf, #d6e6f5);
+}
+
+.basedir-toggle {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 0; font-weight: 600; cursor: pointer;
+}
+.basedir-toggle input { transform: scale(1.15); }
+.paths-block { margin-top: 12px; }
+.paths-block .lbl { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+.lbl-row { display: flex; justify-content: space-between; align-items: center; }
+.path-row {
+  display: block; font-family: Consolas, monospace; font-size: 12px;
+  background: rgba(95,203,111,0.08); color: var(--text);
+  padding: 4px 8px; border-radius: 4px; margin: 2px 0; word-break: break-all;
+}
+.paths-block textarea {
+  width: 100%; box-sizing: border-box; padding: 8px;
+  font-family: Consolas, monospace; font-size: 12px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: #fff; resize: vertical;
+}
+.paths-block .tiny { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+.paths-block .tiny code { background: rgba(255,183,77,0.15); padding: 0 4px; border-radius: 3px; }
+.mini-btn {
+  font-size: 11px; padding: 3px 8px; border-radius: 4px;
+  border: 1px solid var(--border); background: #fff; cursor: pointer;
+  color: var(--text);
+}
+.mini-btn:hover:not(:disabled) { background: var(--primary-light); border-color: var(--primary); }
+.mini-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .t2-data { font-family: Consolas, monospace; font-size: 11px; word-break: break-all; }
 
 .info-row { display: flex; align-items: baseline; gap: 8px; padding: 6px 0; }
