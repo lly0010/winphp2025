@@ -322,3 +322,154 @@ func (m MySQL) CreateDatabase(name, rootPwd string) error {
 	}
 	return nil
 }
+
+// MysqlDatabase 一个数据库 (用于前端表格)
+type MysqlDatabase struct {
+	Name    string `json:"name"`
+	Charset string `json:"charset"`
+	System  bool   `json:"system"` // 系统库 (information_schema 等), 前端不让删
+}
+
+// MysqlUser 一个 MySQL 用户帐号 (User@Host)
+type MysqlUser struct {
+	User   string `json:"user"`
+	Host   string `json:"host"`
+	System bool   `json:"system"` // 系统账号 (mysql.session 等)
+}
+
+var mysqlSystemDbs = map[string]bool{
+	"information_schema": true,
+	"mysql":              true,
+	"performance_schema": true,
+	"sys":                true,
+}
+
+var mysqlSystemUsers = map[string]bool{
+	"mysql.session":    true,
+	"mysql.sys":        true,
+	"mysql.infoschema": true,
+}
+
+// runSQL 用 mysql 客户端跑一段 SQL. batch=true 用 --batch --skip-column-names,
+// 输出 tab 分隔无标题, 方便程序解析.
+func (m MySQL) runSQL(rootPwd, sql string, batch bool) (string, error) {
+	args := []string{"-u", "root", "--protocol=tcp", "-h", "127.0.0.1"}
+	if rootPwd != "" {
+		args = append(args, "-p"+rootPwd)
+	}
+	if batch {
+		args = append(args, "--batch", "--skip-column-names")
+	}
+	args = append(args, "-e", sql)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, m.ClientPath(), args...)
+	hideWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%v\n%s", err, textenc.ToUTF8(out))
+	}
+	return textenc.ToUTF8(out), nil
+}
+
+// ListDatabases 返回所有数据库. 系统库 (information_schema 等) 标 System=true.
+func (m MySQL) ListDatabases(rootPwd string) ([]MysqlDatabase, error) {
+	if !m.Status().Running {
+		return nil, fmt.Errorf("MySQL 未运行")
+	}
+	sql := "SELECT schema_name, default_character_set_name FROM information_schema.SCHEMATA ORDER BY schema_name;"
+	out, err := m.runSQL(rootPwd, sql, true)
+	if err != nil {
+		return nil, err
+	}
+	dbs := make([]MysqlDatabase, 0)
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) < 1 {
+			continue
+		}
+		name := parts[0]
+		charset := ""
+		if len(parts) >= 2 {
+			charset = parts[1]
+		}
+		dbs = append(dbs, MysqlDatabase{
+			Name:    name,
+			Charset: charset,
+			System:  mysqlSystemDbs[name],
+		})
+	}
+	return dbs, nil
+}
+
+// ListUsers 返回所有 MySQL 账号. 系统账号 (mysql.session 等) 标 System=true.
+func (m MySQL) ListUsers(rootPwd string) ([]MysqlUser, error) {
+	if !m.Status().Running {
+		return nil, fmt.Errorf("MySQL 未运行")
+	}
+	sql := "SELECT User, Host FROM mysql.user ORDER BY User, Host;"
+	out, err := m.runSQL(rootPwd, sql, true)
+	if err != nil {
+		return nil, err
+	}
+	users := make([]MysqlUser, 0)
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) < 2 {
+			continue
+		}
+		users = append(users, MysqlUser{
+			User:   parts[0],
+			Host:   parts[1],
+			System: mysqlSystemUsers[parts[0]],
+		})
+	}
+	return users, nil
+}
+
+// DropDatabase 删库. 系统库禁删.
+func (m MySQL) DropDatabase(name, rootPwd string) error {
+	if !m.Status().Running {
+		return fmt.Errorf("MySQL 未运行")
+	}
+	if !isSafeMysqlIdent(name) {
+		return fmt.Errorf("库名只能包含字母数字下划线")
+	}
+	if mysqlSystemDbs[name] {
+		return fmt.Errorf("禁止删除系统库 %s", name)
+	}
+	_, err := m.runSQL(rootPwd, fmt.Sprintf("DROP DATABASE IF EXISTS `%s`;", name), false)
+	return err
+}
+
+// DropUser 删账号. root 和系统账号禁删.
+func (m MySQL) DropUser(user, host, rootPwd string) error {
+	if !m.Status().Running {
+		return fmt.Errorf("MySQL 未运行")
+	}
+	if !isSafeMysqlIdent(user) {
+		return fmt.Errorf("用户名只能包含字母数字下划线")
+	}
+	if user == "root" {
+		return fmt.Errorf("禁止删除 root 用户")
+	}
+	if mysqlSystemUsers[user] {
+		return fmt.Errorf("禁止删除系统账号 %s", user)
+	}
+	if host == "" {
+		host = "localhost"
+	}
+	if !isSafeMysqlHost(host) {
+		return fmt.Errorf("host 只能包含字母数字下划线点百分号")
+	}
+	_, err := m.runSQL(rootPwd, fmt.Sprintf("DROP USER IF EXISTS '%s'@'%s';", user, host), false)
+	return err
+}

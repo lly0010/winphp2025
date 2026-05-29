@@ -692,6 +692,34 @@ func (a *App) MysqlCreateUser(in MysqlCreateUserInput) error {
 	return a.mysql.CreateUser(in.RootPwd, in.DbName, in.User, in.UserPwd, in.Host)
 }
 
+// MysqlListDatabases 列出所有数据库 (含字符集 + 系统库标记).
+func (a *App) MysqlListDatabases(rootPwd string) ([]services.MysqlDatabase, error) {
+	return a.mysql.ListDatabases(rootPwd)
+}
+
+// MysqlListUsers 列出所有 MySQL 账号 (User@Host).
+func (a *App) MysqlListUsers(rootPwd string) ([]services.MysqlUser, error) {
+	return a.mysql.ListUsers(rootPwd)
+}
+
+// MysqlDropDatabase 删库 (系统库禁删).
+func (a *App) MysqlDropDatabase(name, rootPwd string) error {
+	if err := a.mysql.DropDatabase(name, rootPwd); err != nil {
+		return err
+	}
+	logger.Info("MySQL 数据库已删除: %s", name)
+	return nil
+}
+
+// MysqlDropUser 删账号 (root / 系统账号禁删).
+func (a *App) MysqlDropUser(user, host, rootPwd string) error {
+	if err := a.mysql.DropUser(user, host, rootPwd); err != nil {
+		return err
+	}
+	logger.Info("MySQL 账号已删除: %s@%s", user, host)
+	return nil
+}
+
 // RedisGetPassword 返回 redis.windows.conf 里当前的 requirepass (空串 = 无密码).
 func (a *App) RedisGetPassword() string { return a.redis.Password() }
 
