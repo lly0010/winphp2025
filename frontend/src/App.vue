@@ -72,6 +72,9 @@ provide('setWallpaperUrl', (u) => { wallpaperUrl.value = u || '' })
 // 主题切换 (applied = {info:{id,name,...}, css:""}, css 非空时注入自定义主题)
 const currentThemeId = ref('default')
 provide('currentThemeId', currentThemeId)
+// 内置主题 id 集合 (CSS 已在 style.css 里通过 [data-theme="<id>"] 写好)
+const BUILTIN_THEME_IDS = new Set(['blue-classic', 'hibike-euphonium'])
+
 function applyTheme(applied) {
   if (!applied || !applied.info) return
   currentThemeId.value = applied.info.id
@@ -79,8 +82,8 @@ function applyTheme(applied) {
   const id = applied.info.id
   if (id === 'default') {
     document.documentElement.removeAttribute('data-theme')
-  } else if (id === 'blue-classic') {
-    document.documentElement.setAttribute('data-theme', 'blue-classic')
+  } else if (BUILTIN_THEME_IDS.has(id)) {
+    document.documentElement.setAttribute('data-theme', id)
   } else {
     // 自定义主题: 用 data-theme=custom 标记 + 注入 CSS
     document.documentElement.setAttribute('data-theme', 'custom')

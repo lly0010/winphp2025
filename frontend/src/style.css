@@ -1,8 +1,9 @@
 /* ===== 默认主题: 粉紫二次元 =====
  * 用 data-theme 属性切换不同主题. 内置:
  *   (无)               = default 粉紫
- *   data-theme="blue-classic" = 蓝色商务
- *   data-theme="custom"       = 自定义 (CSS 由 <style id="theme-custom"> 注入覆盖)
+ *   data-theme="blue-classic"     = 蓝色商务
+ *   data-theme="hibike-euphonium" = 吹响吧!上低音号 (樱花 + 黄铜)
+ *   data-theme="custom"           = 自定义 (CSS 由 <style id="theme-custom"> 注入覆盖)
  *
  * 第三方主题: 放 themes/<name>/theme.css, 通过 CSS 变量覆盖, 见 themes/example/
  */
@@ -58,6 +59,77 @@
 
   --sidebar-bg: linear-gradient(180deg, #1f2937 0%, #2c3e50 100%);
   --header-grad: linear-gradient(135deg, #2d74b8 0%, #1e5a92 100%);
+}
+
+/* ===== 内置主题: 吹响吧!上低音号 =====
+ * 灵感来自京阿尼《响け!ユーフォニアム》宣传图 — 樱花树下野餐, 春日暖光.
+ * 主色调: 樱花粉 (#e89bb5) + 上低音号黄铜 (#d4a96a) + 春日嫩绿点缀.
+ * 加入飘落樱花花瓣动画 (纯 CSS, 无图片).
+ */
+[data-theme="hibike-euphonium"] {
+  --primary: #e89bb5;
+  --primary-dark: #c97491;
+  --primary-light: #fde6ec;
+  --accent: #d4a96a;
+  --accent-light: #faedd6;
+  --success: #82b87a;
+  --warning: #e6b964;
+  --danger: #e07a82;
+
+  --bg: #fdf8f3;
+  --bg-card: rgba(255, 252, 247, 0.92);
+  --border: #f3e0d8;
+  --border-soft: rgba(232, 155, 181, 0.22);
+
+  --text: #4a3340;
+  --text-secondary: #8a7080;
+  --text-disabled: #c2b5be;
+
+  --shadow: 0 2px 8px rgba(212, 169, 106, 0.08), 0 6px 20px rgba(232, 155, 181, 0.10);
+  --shadow-hover: 0 4px 14px rgba(232, 155, 181, 0.22), 0 10px 32px rgba(212, 169, 106, 0.18);
+  --radius: 14px;
+  --radius-lg: 18px;
+
+  /* 侧边栏渐变: 樱花树干暗紫 → 春日暮色 */
+  --sidebar-bg: linear-gradient(180deg, #3d2533 0%, #5a3a48 50%, #7a5060 100%);
+  --header-grad: linear-gradient(135deg, #e89bb5 0%, #d4a96a 100%);
+}
+
+/* 飘落的樱花花瓣 — 固定 overlay, 不影响交互. 只在京吹主题下出现. */
+[data-theme="hibike-euphonium"] body::before {
+  content: '';
+  position: fixed; inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background-image:
+    radial-gradient(circle at 8% 10%, rgba(232, 155, 181, 0.55) 0 4px, transparent 5px),
+    radial-gradient(circle at 22% 35%, rgba(232, 155, 181, 0.45) 0 3px, transparent 4px),
+    radial-gradient(circle at 42% 18%, rgba(255, 197, 215, 0.50) 0 5px, transparent 6px),
+    radial-gradient(circle at 60% 60%, rgba(232, 155, 181, 0.40) 0 3px, transparent 4px),
+    radial-gradient(circle at 78% 28%, rgba(255, 197, 215, 0.55) 0 4px, transparent 5px),
+    radial-gradient(circle at 88% 75%, rgba(232, 155, 181, 0.45) 0 3px, transparent 4px),
+    radial-gradient(circle at 15% 80%, rgba(255, 197, 215, 0.40) 0 4px, transparent 5px),
+    radial-gradient(circle at 50% 92%, rgba(232, 155, 181, 0.50) 0 3px, transparent 4px);
+  background-size: 100% 100%;
+  animation: sakura-fall 18s linear infinite;
+  opacity: 0.85;
+}
+@keyframes sakura-fall {
+  0%   { background-position: 0% -10%, 0% -20%, 0% -5%, 0% -15%, 0% -10%, 0% -25%, 0% -8%, 0% -30%; }
+  100% { background-position: 0% 110%, 0% 120%, 0% 105%, 0% 115%, 0% 110%, 0% 125%, 0% 108%, 0% 130%; }
+}
+
+/* 京吹主题里, 按钮和卡片微调更柔和 */
+[data-theme="hibike-euphonium"] .btn.primary {
+  background: linear-gradient(135deg, #e89bb5, #d4a96a);
+  border: none; color: #fff;
+}
+[data-theme="hibike-euphonium"] .btn.primary:hover {
+  filter: brightness(1.05);
+  box-shadow: 0 4px 14px rgba(232, 155, 181, 0.40);
+}
+[data-theme="hibike-euphonium"] .table th {
+  background: linear-gradient(90deg, rgba(232, 155, 181, 0.10), rgba(212, 169, 106, 0.10));
 }
 
 * { box-sizing: border-box; }

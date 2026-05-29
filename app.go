@@ -1179,9 +1179,9 @@ func (a *App) setWallpaperFromFile(src string) (Wallpaper, error) {
 	if err != nil {
 		return Wallpaper{Empty: true}, err
 	}
-	// 大小限制 (10 MB)
-	if len(data) > 10*1024*1024 {
-		return Wallpaper{Empty: true}, fmt.Errorf("壁纸文件过大 (%.1f MB), 建议 < 10 MB", float64(len(data))/1024/1024)
+	// 大小限制 (100 MB - 给 4K/超大壁纸留余地)
+	if len(data) > 100*1024*1024 {
+		return Wallpaper{Empty: true}, fmt.Errorf("壁纸文件过大 (%.1f MB), 限制 100 MB", float64(len(data))/1024/1024)
 	}
 	target := filepath.Join(paths.ConfigDir, "wallpaper"+ext)
 	if err := os.WriteFile(target, data, 0o644); err != nil {

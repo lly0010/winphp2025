@@ -57,6 +57,12 @@ var builtins = []Info{
 		PreviewBg:   "linear-gradient(135deg, #2d74b8 0%, #1e5a92 100%)",
 		PreviewFg:   "#ffffff",
 	},
+	{
+		ID: "hibike-euphonium", Name: "吹响吧!上低音号", Builtin: true,
+		Description: "京吹同款 - 樱花粉 + 上低音号黄铜色, 加飘落花瓣动画",
+		PreviewBg:   "linear-gradient(135deg, #e89bb5 0%, #d4a96a 100%)",
+		PreviewFg:   "#ffffff",
+	},
 }
 
 // List 返回所有可用主题 (内置 + themes/ 目录里的自定义).
