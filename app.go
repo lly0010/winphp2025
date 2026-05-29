@@ -214,6 +214,31 @@ func (a *App) StopAll() error {
 
 func (a *App) NginxReload() error { return a.nginx.Reload() }
 
+// NginxSetDefaultPort 改 nginx.conf 里 default_server 那行的监听端口.
+// 运行中会自动调 nginx -t + reload 让端口立即生效.
+// 端口被占/被 Windows 预留时返回带建议的错误.
+func (a *App) NginxSetDefaultPort(port int) error {
+	if port < 1 || port > 65535 {
+		return fmt.Errorf("端口范围 1-65535")
+	}
+	// 端口冲突预检: 新端口和当前端口不同, 且新端口被别的进程占着, 直接拒
+	if port != a.nginx.CurrentPort() && proc.PortListening(port) {
+		diag := portcheck.Diagnose(port)
+		return fmt.Errorf("端口 %d 已被占用. %s", port, diag.Diagnosis)
+	}
+	if err := a.nginx.SetDefaultPort(port); err != nil {
+		return err
+	}
+	logger.Info("Nginx 默认端口已改为 %d", port)
+	// 运行中自动 reload, 否则下次 Start 时生效
+	if a.nginx.Status().Running {
+		if err := a.nginx.Reload(); err != nil {
+			return fmt.Errorf("端口已写入 nginx.conf, 但 reload 失败: %v\n请手动重启 Nginx 让新端口生效", err)
+		}
+	}
+	return nil
+}
+
 // ============ 安装 / 卸载 ============
 
 func (a *App) ListVersions(kind string) ([]sources.VersionEntry, error) {

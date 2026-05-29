@@ -5,7 +5,8 @@
     <div class="svc-grid">
       <ServiceCard kind="nginx"     label="Nginx"       :status="status.nginx"    @install="openInstall('nginx')"
                    @uninstall="confirmUninstall('nginx')" @config="editConfig('nginx', 'nginx.conf')"
-                   @autostart="toggleAuto('nginx')" @custom="openCustom('nginx')" />
+                   @autostart="toggleAuto('nginx')" @custom="openCustom('nginx')"
+                   @editport="changeNginxPort" />
       <ServiceCard kind="php"       label="PHP-CGI"     :status="status.php"      @install="openInstall('php')"
                    @uninstall="confirmUninstall('php')" @config="editConfig('php', 'php.ini')"
                    @autostart="toggleAuto('php')" @custom="openCustom('php')" />
@@ -131,6 +132,29 @@ async function confirmUninstall(kind) {
 function editConfig(key, title) {
   cfgKey.value = key
   cfgTitle.value = title
+}
+
+async function changeNginxPort() {
+  const cur = props.status?.nginx?.port || 80
+  const input = window.prompt(
+    `修改 Nginx 默认监听端口 (当前 ${cur}).\n` +
+    `常用: 80 / 8080 / 8000. 范围 1-65535.\n` +
+    `运行中会自动 reload, 修改后浏览器用 http://localhost:新端口 访问.`,
+    String(cur)
+  )
+  if (input === null) return
+  const port = parseInt(input.trim(), 10)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    alert('端口要是 1-65535 之间的整数')
+    return
+  }
+  if (port === cur) return
+  try {
+    await api.NginxSetDefaultPort(port)
+    alert('✓ Nginx 端口已改为 ' + port + ', 浏览器用 http://localhost:' + port + ' 访问.')
+  } catch (e) {
+    alert('修改端口失败: ' + e)
+  }
 }
 
 async function toggleAuto(kind) {

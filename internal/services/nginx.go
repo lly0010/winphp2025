@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -50,6 +51,9 @@ func (n Nginx) Version() string {
 	return ""
 }
 
+// CurrentPort 读当前 nginx.conf 里 default_server 的 listen 端口. 默认 80.
+func (n Nginx) CurrentPort() int { return detectNginxPort() }
+
 func (n Nginx) Status() Status {
 	binOk := false
 	if _, err := os.Stat(n.ExePath()); err == nil {
@@ -61,6 +65,7 @@ func (n Nginx) Status() Status {
 		svcInstalled = true
 		svc = ServiceStatusStr(NginxServiceName)
 	}
+	port := detectNginxPort()
 	running := false
 	if svc == "Running" {
 		running = true
@@ -69,11 +74,11 @@ func (n Nginx) Status() Status {
 		running = proc.HasProcessByPathPrefix("nginx", paths.NginxDir)
 	}
 	if !running && binOk {
-		// 端口兜底
-		running = proc.PortListening(80)
+		// 端口兜底 (用 conf 里实际的端口)
+		running = proc.PortListening(port)
 	}
 	return Status{
-		Running: running, Port: 80, Version: n.Version(),
+		Running: running, Port: port, Version: n.Version(),
 		ServiceInstalled: svcInstalled, ServiceStatus: svc, BinInstalled: binOk,
 	}
 }
@@ -138,6 +143,33 @@ func (n Nginx) Start() error {
 		)
 	}
 	logger.Info("Nginx 启动")
+	return nil
+}
+
+// SetDefaultPort 改写 nginx.conf 里 default_server 那行的监听端口.
+// 只动 default_server 那行 (主默认站), 各 vhost 的 listen 端口不变.
+// 写完不会 reload, 由调用方决定.
+func (n Nginx) SetDefaultPort(port int) error {
+	if port < 1 || port > 65535 {
+		return fmt.Errorf("端口范围 1-65535")
+	}
+	confFile := filepath.Join(paths.NginxDir, "conf", "nginx.conf")
+	b, err := os.ReadFile(confFile)
+	if err != nil {
+		return fmt.Errorf("读 nginx.conf 失败: %w", err)
+	}
+	// 支持两种形式:
+	//   listen 80 default_server;
+	//   listen 127.0.0.1:80 default_server;
+	// 不动各 vhost 的非 default_server listen 行.
+	re := regexp.MustCompile(`(?m)^(\s*listen\s+(?:[^\s;:]+:)?)\d+(\s+default_server.*)$`)
+	replaced := re.ReplaceAllString(string(b), fmt.Sprintf("${1}%d${2}", port))
+	if replaced == string(b) {
+		return fmt.Errorf("nginx.conf 里没找到 'listen <port> default_server' 行 (可能被手动改过), 请直接编辑 nginx.conf 改 listen")
+	}
+	if err := os.WriteFile(confFile, []byte(replaced), 0o644); err != nil {
+		return fmt.Errorf("写 nginx.conf 失败: %w", err)
+	}
 	return nil
 }
 

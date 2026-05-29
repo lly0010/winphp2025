@@ -12,7 +12,11 @@
     </div>
     <div class="info">
       <div><span class="lbl">版本</span>{{ status?.version || '未安装' }}</div>
-      <div><span class="lbl">端口</span>{{ status?.port }}</div>
+      <div>
+        <span class="lbl">端口</span>{{ status?.port }}
+        <button v-if="kind === 'nginx' && status?.binInstalled" class="port-edit-btn"
+                @click="$emit('editport')" title="修改默认端口">✎</button>
+      </div>
       <div><span class="lbl">服务</span>
         <template v-if="status?.serviceInstalled">
           <span style="color: var(--success)">已注册 ({{ status.serviceStatus }})</span>
@@ -48,7 +52,7 @@
 <script setup>
 import { inject, reactive, computed } from 'vue'
 const props = defineProps({ kind: String, label: String, status: Object })
-const emit = defineEmits(['install', 'uninstall', 'config', 'autostart', 'custom'])
+const emit = defineEmits(['install', 'uninstall', 'config', 'autostart', 'custom', 'editport'])
 const api = inject('api')
 
 const iconMap = {
@@ -161,6 +165,14 @@ async function run(action) {
   background: linear-gradient(135deg, #ffe9c8, #ffd9b0);
   border-color: #e0b84a; color: #8a5a1a;
 }
+
+.port-edit-btn {
+  border: 1px solid var(--border); background: #fff;
+  color: var(--text-secondary); padding: 0 6px;
+  font-size: 11px; line-height: 1.4; border-radius: 4px;
+  cursor: pointer; margin-left: 6px;
+}
+.port-edit-btn:hover { color: var(--primary-dark); border-color: var(--primary); background: var(--primary-light); }
 
 .auto-btn { margin-top: 4px; padding: 9px 0; font-size: 12px; }
 .auto-btn.active {
