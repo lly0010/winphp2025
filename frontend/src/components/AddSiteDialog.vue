@@ -21,8 +21,11 @@
 
         <div class="form-row">
           <label>根目录</label>
-          <div class="input-group">
+          <div class="input-group root-row">
             <input v-model="root" @input="rootManual = true" placeholder="www/myblog" />
+            <button type="button" class="btn sm browse-btn" @click="pickRoot" :disabled="picking">
+              {{ picking ? '...' : '浏览...' }}
+            </button>
           </div>
         </div>
 
@@ -108,6 +111,23 @@ const submitting = ref(false)
 const error = ref('')
 const rootManual = ref(false)
 const serverManual = ref(false)
+const picking = ref(false)
+
+async function pickRoot() {
+  picking.value = true
+  try {
+    const start = root.value || wwwDir || ''
+    const picked = await api.PickDirectory('选择网站根目录', start)
+    if (picked) {
+      root.value = picked
+      rootManual.value = true
+    }
+  } catch (e) {
+    error.value = '选择目录失败: ' + e
+  } finally {
+    picking.value = false
+  }
+}
 
 let wwwDir = ''
 onMounted(async () => {
@@ -156,6 +176,9 @@ async function submit() {
 </script>
 
 <style scoped>
+.root-row { display: flex; gap: 6px; align-items: stretch; }
+.root-row input { flex: 1; min-width: 0; }
+.browse-btn { white-space: nowrap; flex-shrink: 0; }
 .cb { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .ok { color: var(--success); }
 .warn { color: var(--danger); }

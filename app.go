@@ -1159,6 +1159,27 @@ func (a *App) GetDataDirInfo() DataDirInfo {
 	return info
 }
 
+// PickDirectory 通用文件夹选择对话框. 前端"浏览..."按钮调用.
+// title 标题 (空就用默认), defaultDir 起始目录 (空就用 www 目录).
+// 返回用户选中的绝对路径; 取消返回空串.
+func (a *App) PickDirectory(title, defaultDir string) (string, error) {
+	if title == "" {
+		title = "选择文件夹"
+	}
+	if defaultDir == "" {
+		defaultDir = paths.WwwDir
+	}
+	selected, err := wruntime.OpenDirectoryDialog(a.ctx, wruntime.OpenDialogOptions{
+		Title:                title,
+		DefaultDirectory:     defaultDir,
+		CanCreateDirectories: true,
+	})
+	if err != nil {
+		return "", err
+	}
+	return selected, nil
+}
+
 // PickAndSetDataDir 弹文件夹选择对话框, 把目标路径写入 EXE 旁的 data-dir.txt.
 // 用户需重启面板才生效 (返回前不切换 paths.Root, 避免运行中乱).
 func (a *App) PickAndSetDataDir() (DataDirInfo, error) {
