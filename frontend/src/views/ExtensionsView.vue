@@ -49,7 +49,7 @@
             <p v-if="selectedExt.note">{{ selectedExt.note }}</p>
             <p v-if="selectedExt.deps && selectedExt.deps.length">
               依赖: <code>{{ selectedExt.deps.join(', ') }}</code>
-              (这次只装主扩展, 依赖请另外装)
+              <span class="auto-tag">✓ 会自动联装</span>
             </p>
           </div>
           <div class="hint">
@@ -207,6 +207,11 @@ async function doInstall() {
 .ext-desc strong { color: var(--text); }
 .ext-desc p { margin: 4px 0 0; }
 .ext-desc code { background: rgba(255,111,158,0.10); padding: 1px 5px; border-radius: 3px; font-family: Consolas, monospace; }
+.ext-desc .auto-tag {
+  display: inline-block; margin-left: 6px;
+  font-size: 10px; padding: 2px 7px; border-radius: 8px;
+  background: rgba(95,203,111,0.14); color: #2d7a2d;
+}
 
 .hint {
   margin-top: 12px; padding: 10px 12px;

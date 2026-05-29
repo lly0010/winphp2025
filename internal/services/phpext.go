@@ -109,10 +109,76 @@ func peclURL(name, extVer, phpMM, vsTag string, ts bool) string {
 	)
 }
 
+// findInstallableExt 在内置清单里按名字找元数据.
+func findInstallableExt(name string) *InstallableExt {
+	for _, e := range KnownInstallableExts() {
+		if e.Name == name {
+			ext := e
+			return &ext
+		}
+	}
+	return nil
+}
+
+// hasExtDLL 看 ext/ 下是否已有该扩展的 dll (php_<name>.dll).
+// 注意: 一个扩展可能解压出多个 dll, 我们以主 dll 名字判断.
+func (p PHP) hasExtDLL(name string) bool {
+	candidates := []string{
+		filepath.Join(paths.PhpDir, "ext", "php_"+name+".dll"),
+		filepath.Join(paths.PhpDir, "ext", name+".dll"),
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 // InstallExtensionFromPECL 从 PECL 下载并安装一个 PHP 扩展.
-// 流程: 检测 php 版本 → 构造 URL → 下载 zip → 解压所有 *.dll 到 ext/ → 改 php.ini.
+// 自动递归装依赖 (Deps, 用各依赖的默认版本; 已装的跳过).
+// 流程: 检测 php 版本 → 装依赖 → 构造 URL → 下载 zip → 解压 *.dll → 改 php.ini.
 // 重启 PHP-CGI 才生效.
 func (p PHP) InstallExtensionFromPECL(ctx context.Context, name, extVer string, prog download.ProgressFn) error {
+	return p.installExtWithDeps(ctx, name, extVer, prog, map[string]bool{})
+}
+
+// installExtWithDeps 递归装依赖再装自己. visited 防循环.
+func (p PHP) installExtWithDeps(ctx context.Context, name, extVer string, prog download.ProgressFn, visited map[string]bool) error {
+	if visited[name] {
+		return nil
+	}
+	visited[name] = true
+
+	// 先装依赖 (按内置清单的 default 版本)
+	if info := findInstallableExt(name); info != nil {
+		for _, dep := range info.Deps {
+			if p.hasExtDLL(dep) {
+				logger.Info("依赖 %s 已安装, 跳过", dep)
+				continue
+			}
+			depInfo := findInstallableExt(dep)
+			if depInfo == nil {
+				logger.Warn("依赖 %s 不在内置扩展清单, 无法自动装. 主扩展可能会因缺失依赖加载失败", dep)
+				continue
+			}
+			depVer := depInfo.Default
+			if depVer == "" && len(depInfo.Versions) > 0 {
+				depVer = depInfo.Versions[0]
+			}
+			logger.Info("自动安装依赖: %s %s", dep, depVer)
+			if err := p.installExtWithDeps(ctx, dep, depVer, prog, visited); err != nil {
+				// 依赖装失败只警告, 继续装主扩展. 主扩展可能不需要依赖也能用.
+				logger.Warn("依赖 %s 安装失败 (继续装主扩展): %v", dep, err)
+			}
+		}
+	}
+
+	return p.installOneExt(ctx, name, extVer, prog)
+}
+
+// installOneExt 装单个扩展 (不递归依赖).
+func (p PHP) installOneExt(ctx context.Context, name, extVer string, prog download.ProgressFn) error {
 	if _, err := os.Stat(p.ExePath()); err != nil {
 		return fmt.Errorf("PHP 未安装, 请先到首页安装 PHP")
 	}
@@ -133,7 +199,7 @@ func (p PHP) InstallExtensionFromPECL(ctx context.Context, name, extVer string, 
 		peclURL(name, extVer, phpMM, vsTag, true),
 	}
 	if err := download.DownloadWithRetry(ctx, urls, tmpZip, prog, 2); err != nil {
-		return fmt.Errorf("下载扩展失败: %w\n常见原因: 该版本对你的 PHP %s (%s) 不可用, 换个版本试试", err, phpVer, vsTag)
+		return fmt.Errorf("下载扩展 %s 失败: %w\n常见原因: 该版本对你的 PHP %s (%s) 不可用, 换个版本试试", name, err, phpVer, vsTag)
 	}
 	defer os.Remove(tmpZip)
 
@@ -141,7 +207,7 @@ func (p PHP) InstallExtensionFromPECL(ctx context.Context, name, extVer string, 
 	extractDir := filepath.Join(paths.TmpDir, "php_ext_extract_"+name)
 	_ = os.RemoveAll(extractDir)
 	if err := extract.Zip(tmpZip, extractDir, ""); err != nil {
-		return fmt.Errorf("解压失败: %w", err)
+		return fmt.Errorf("解压 %s 失败: %w", name, err)
 	}
 	defer os.RemoveAll(extractDir)
 
@@ -158,8 +224,6 @@ func (p PHP) InstallExtensionFromPECL(ctx context.Context, name, extVer string, 
 		if !strings.HasSuffix(strings.ToLower(n), ".dll") {
 			return nil
 		}
-		// 跳过非 php_ 开头的 (有的 zip 带 readline / phpdbg 之类无关 dll)
-		// 但 imagick 之类会带 CORE_RL_*.dll 也是需要的, 所以宽松判断: 只跳过 php_engine 本身
 		dst := filepath.Join(extDir, n)
 		if err := copyOne(path, dst); err != nil {
 			logger.Warn("拷贝 %s 失败: %v", n, err)
@@ -169,13 +233,13 @@ func (p PHP) InstallExtensionFromPECL(ctx context.Context, name, extVer string, 
 		return nil
 	})
 	if len(copied) == 0 {
-		return fmt.Errorf("zip 内没找到 *.dll, 可能包结构异常")
+		return fmt.Errorf("%s zip 内没找到 *.dll, 可能包结构异常", name)
 	}
 	logger.Info("PHP 扩展 %s %s 已装: %v", name, extVer, copied)
 
 	// 改 php.ini 启用主扩展
 	if err := p.SetExtension(name, true); err != nil {
-		return fmt.Errorf("写 php.ini 失败: %w", err)
+		return fmt.Errorf("写 php.ini 失败 (%s): %w", name, err)
 	}
 	return nil
 }
