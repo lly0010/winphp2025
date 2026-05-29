@@ -258,3 +258,129 @@ func copyOne(src, dst string) error {
 	_, err = io.Copy(out, in)
 	return err
 }
+
+// InstallExtensionFromURL 用用户提供的自定义 URL 下载安装一个 PHP 扩展.
+// urls: 一个或多个候选下载地址 (依次重试). 接受 zip (会解压挑 dll) 或单个 .dll 直链.
+// name: 扩展短名 (用来写 php.ini 的 extension=<name>); 空就从文件名推.
+// 不自动装依赖 — 自定义场景假定用户自己清楚.
+func (p PHP) InstallExtensionFromURL(ctx context.Context, name string, urls []string, prog download.ProgressFn) error {
+	if _, err := os.Stat(p.ExePath()); err != nil {
+		return fmt.Errorf("PHP 未安装, 请先到首页安装 PHP")
+	}
+	if len(urls) == 0 {
+		return fmt.Errorf("请至少填一个下载 URL")
+	}
+	firstURL := urls[0]
+	lowerURL := strings.ToLower(firstURL)
+	isDll := strings.HasSuffix(lowerURL, ".dll")
+	isZip := strings.HasSuffix(lowerURL, ".zip") || !isDll
+
+	tag := name
+	if tag == "" {
+		tag = "custom"
+	}
+	tmpPath := filepath.Join(paths.TmpDir, "php_ext_url_"+tag)
+	if isZip {
+		tmpPath += ".zip"
+	} else {
+		tmpPath += ".dll"
+	}
+	if err := download.DownloadWithRetry(ctx, urls, tmpPath, prog, 2); err != nil {
+		return fmt.Errorf("下载失败: %w", err)
+	}
+	defer os.Remove(tmpPath)
+
+	extDir := filepath.Join(paths.PhpDir, "ext")
+	if err := os.MkdirAll(extDir, 0o755); err != nil {
+		return err
+	}
+
+	var copied []string
+	if isDll {
+		dstName := filepath.Base(firstURL)
+		if !strings.HasPrefix(strings.ToLower(dstName), "php_") {
+			dstName = "php_" + dstName
+		}
+		if err := copyOne(tmpPath, filepath.Join(extDir, dstName)); err != nil {
+			return fmt.Errorf("拷贝 dll 失败: %w", err)
+		}
+		copied = append(copied, dstName)
+		if name == "" {
+			n := strings.ToLower(strings.TrimSuffix(dstName, ".dll"))
+			name = strings.TrimPrefix(n, "php_")
+		}
+	} else {
+		extractDir := filepath.Join(paths.TmpDir, "php_ext_url_extract_"+tag)
+		_ = os.RemoveAll(extractDir)
+		if err := extract.Zip(tmpPath, extractDir, ""); err != nil {
+			return fmt.Errorf("解压失败: %w", err)
+		}
+		defer os.RemoveAll(extractDir)
+		_ = filepath.Walk(extractDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info == nil || info.IsDir() {
+				return nil
+			}
+			n := info.Name()
+			if !strings.HasSuffix(strings.ToLower(n), ".dll") {
+				return nil
+			}
+			dst := filepath.Join(extDir, n)
+			if err := copyOne(path, dst); err != nil {
+				logger.Warn("拷贝 %s 失败: %v", n, err)
+				return nil
+			}
+			copied = append(copied, n)
+			return nil
+		})
+		if len(copied) == 0 {
+			return fmt.Errorf("zip 内没找到 *.dll, 可能包结构异常或不是扩展包")
+		}
+		if name == "" {
+			for _, n := range copied {
+				lo := strings.ToLower(n)
+				if strings.HasPrefix(lo, "php_") {
+					name = strings.TrimSuffix(strings.TrimPrefix(lo, "php_"), ".dll")
+					break
+				}
+			}
+		}
+	}
+	if name == "" {
+		return fmt.Errorf("装好了 dll 但推断不出扩展名, 请在表单里手动填 name")
+	}
+	logger.Info("PHP 扩展 %s 已装 (自定义 URL): %v", name, copied)
+	if err := p.SetExtension(name, true); err != nil {
+		return fmt.Errorf("写 php.ini 失败 (%s): %w", name, err)
+	}
+	return nil
+}
+
+// UninstallExtension 卸载扩展: 删 ext/ 下 php_<name>.dll + 注释掉 php.ini 里的 extension=<name>.
+// PHP-CGI 重启后完全生效. 删除 dll 失败 (CGI 持有句柄) 时仅日志告警.
+func (p PHP) UninstallExtension(name string) error {
+	if name == "" {
+		return fmt.Errorf("扩展名为空")
+	}
+	if strings.ContainsAny(name, `/\:.`) {
+		return fmt.Errorf("非法扩展名")
+	}
+	if err := p.SetExtension(name, false); err != nil {
+		return fmt.Errorf("修改 php.ini 失败: %w", err)
+	}
+	candidates := []string{
+		filepath.Join(paths.PhpDir, "ext", "php_"+name+".dll"),
+		filepath.Join(paths.PhpDir, "ext", name+".dll"),
+	}
+	removed := []string{}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			if err := os.Remove(c); err != nil {
+				logger.Warn("删除 %s 失败: %v (PHP-CGI 可能持有, 重启后再试)", c, err)
+			} else {
+				removed = append(removed, filepath.Base(c))
+			}
+		}
+	}
+	logger.Info("PHP 扩展 %s 已卸载. 删除文件: %v (重启 PHP-CGI 完全生效)", name, removed)
+	return nil
+}

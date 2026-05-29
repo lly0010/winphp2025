@@ -841,6 +841,30 @@ func (a *App) PhpInstallableExts() []services.InstallableExt {
 	return services.KnownInstallableExts()
 }
 
+// PhpInstallExtensionFromURL 用用户提供的 URL 装一个扩展 (替代 PECL 自动构造).
+// urls: 一个或多个候选 URL (依次重试). 支持 .zip / .dll 直链.
+// name: 扩展短名 (留空就从下载文件名推).
+// 进度通过 phpext:progress 事件推前端.
+func (a *App) PhpInstallExtensionFromURL(name string, urls []string) error {
+	tag := name
+	if tag == "" {
+		tag = "custom"
+	}
+	ctx := a.registerCancel("phpext:" + tag)
+	defer a.clearCancel("phpext:" + tag)
+	prog := func(d, t int64) {
+		wruntime.EventsEmit(a.ctx, "phpext:progress", map[string]any{
+			"name": tag, "loaded": d, "total": t,
+		})
+	}
+	return a.php.InstallExtensionFromURL(ctx, name, urls, prog)
+}
+
+// PhpUninstallExtension 卸载一个扩展 (删 dll + 注释 php.ini). 重启 PHP-CGI 生效.
+func (a *App) PhpUninstallExtension(name string) error {
+	return a.php.UninstallExtension(name)
+}
+
 // PhpInstallExtension 从 PECL 在线下载并安装一个 PHP 扩展.
 // 自动检测 PHP 版本和 VS 编译标签, 构造 PECL Windows zip URL,
 // 下载 → 解压 → 拷贝 *.dll 到 ext/ → 改 php.ini 启用. 重启 PHP-CGI 生效.
