@@ -110,13 +110,93 @@ func (r Redis) Stop() error {
 	if ServiceExists(RedisServiceName) {
 		_ = StopService(RedisServiceName)
 	}
-	// 优雅关停: redis-cli shutdown
+	// 优雅关停: redis-cli shutdown (有密码就带 -a)
 	if _, err := os.Stat(r.CliPath()); err == nil {
-		_, _ = runHidden(r.CliPath(), 5*time.Second, "-h", "127.0.0.1", "-p", "6379", "shutdown", "nosave")
+		args := []string{"-h", "127.0.0.1", "-p", "6379"}
+		if pwd := r.Password(); pwd != "" {
+			args = append(args, "-a", pwd)
+		}
+		args = append(args, "shutdown", "nosave")
+		_, _ = runHidden(r.CliPath(), 5*time.Second, args...)
 	}
 	time.Sleep(500 * time.Millisecond)
 	killByPathPrefix("redis-server", paths.RedisDir)
 	logger.Info("Redis 已停止")
+	return nil
+}
+
+// Password 从 redis.windows.conf 里抓当前 requirepass. 空串=无密码.
+func (r Redis) Password() string {
+	b, err := os.ReadFile(r.ConfPath())
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		l := strings.TrimSpace(line)
+		if strings.HasPrefix(l, "#") {
+			continue
+		}
+		if strings.HasPrefix(l, "requirepass") {
+			rest := strings.TrimSpace(strings.TrimPrefix(l, "requirepass"))
+			rest = strings.Trim(rest, `"' `)
+			return rest
+		}
+	}
+	return ""
+}
+
+// SetPassword 改 Redis 访问密码.
+// 空串 = 移除密码 (清掉 conf 里的 requirepass 行).
+// 写完 conf 后, 如果 Redis 正在运行还会通过 CONFIG SET 立即生效, 不需要重启.
+func (r Redis) SetPassword(newPwd string) error {
+	if strings.ContainsAny(newPwd, "\n\r\"") {
+		return fmt.Errorf("密码不能包含换行或双引号")
+	}
+	confPath := r.ConfPath()
+	// 自我修复: 配置不存在就先生成
+	if _, err := os.Stat(confPath); err != nil {
+		if e := (Redis{}).InitConfig(); e != nil {
+			return fmt.Errorf("redis 配置不存在, 自动生成失败: %v", e)
+		}
+	}
+	oldPwd := r.Password()
+	text, err := readFileAll(confPath)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(text, "\n")
+	kept := make([]string, 0, len(lines))
+	for _, l := range lines {
+		body := strings.TrimLeft(strings.TrimSpace(l), "# \t")
+		if strings.HasPrefix(body, "requirepass") {
+			continue
+		}
+		kept = append(kept, l)
+	}
+	if newPwd != "" {
+		kept = append(kept, `requirepass "`+newPwd+`"`)
+	}
+	if err := os.WriteFile(confPath, []byte(strings.Join(kept, "\n")), 0o644); err != nil {
+		return err
+	}
+	// 运行中就直接 CONFIG SET 一把, 立即生效
+	if proc.HasProcessByPathPrefix("redis-server", paths.RedisDir) || proc.PortListening(6379) {
+		if _, err := os.Stat(r.CliPath()); err == nil {
+			args := []string{"-h", "127.0.0.1", "-p", "6379"}
+			if oldPwd != "" {
+				args = append(args, "-a", oldPwd)
+			}
+			args = append(args, "CONFIG", "SET", "requirepass", newPwd)
+			if out, err := runHidden(r.CliPath(), 5*time.Second, args...); err != nil {
+				logger.Warn("Redis CONFIG SET requirepass 失败 (重启 Redis 后仍会生效): %v\n%s", err, out)
+			}
+		}
+	}
+	if newPwd == "" {
+		logger.Info("Redis 密码已清除")
+	} else {
+		logger.Info("Redis 密码已更新")
+	}
 	return nil
 }
 

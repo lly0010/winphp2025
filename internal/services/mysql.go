@@ -212,6 +212,89 @@ func (m MySQL) SetRootPassword(newPwd string) error {
 	return nil
 }
 
+// isSafeMysqlIdent 仅允许字母数字下划线 (库名/用户名). 避免 SQL 注入.
+func isSafeMysqlIdent(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		ok := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// isSafeMysqlHost 允许 host 里出现字母数字下划线点百分号短横线 (覆盖 localhost / % / IP).
+func isSafeMysqlHost(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		ok := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+			c == '_' || c == '.' || c == '%' || c == '-' || c == ':'
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// escSql 转义 SQL 字符串字面量里的 \ 和 '.
+func escSql(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `'`, `\'`)
+	return s
+}
+
+// CreateUser 创建 MySQL 用户并 (可选) 绑定到一个库.
+// dbName 非空: 同时 CREATE DATABASE + GRANT ALL.
+// host 默认 localhost (仅本机). 用 % 表示任意主机.
+// 同名用户存在则用 ALTER 改密码 (幂等).
+func (m MySQL) CreateUser(rootPwd, dbName, user, userPwd, host string) error {
+	if !m.Status().Running {
+		return fmt.Errorf("MySQL 未运行")
+	}
+	if !isSafeMysqlIdent(user) {
+		return fmt.Errorf("用户名只能包含字母数字下划线")
+	}
+	if dbName != "" && !isSafeMysqlIdent(dbName) {
+		return fmt.Errorf("库名只能包含字母数字下划线")
+	}
+	if host == "" {
+		host = "localhost"
+	}
+	if !isSafeMysqlHost(host) {
+		return fmt.Errorf("host 只能包含字母数字下划线点百分号")
+	}
+	pwd := escSql(userPwd)
+	var stmts []string
+	stmts = append(stmts, fmt.Sprintf("CREATE USER IF NOT EXISTS '%s'@'%s' IDENTIFIED BY '%s';", user, host, pwd))
+	stmts = append(stmts, fmt.Sprintf("ALTER USER '%s'@'%s' IDENTIFIED BY '%s';", user, host, pwd))
+	if dbName != "" {
+		stmts = append(stmts, fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;", dbName))
+		stmts = append(stmts, fmt.Sprintf("GRANT ALL PRIVILEGES ON `%s`.* TO '%s'@'%s';", dbName, user, host))
+	}
+	stmts = append(stmts, "FLUSH PRIVILEGES;")
+	sql := strings.Join(stmts, "\n")
+
+	args := []string{"-u", "root", "--protocol=tcp", "-h", "127.0.0.1"}
+	if rootPwd != "" {
+		args = append(args, "-p"+rootPwd)
+	}
+	args = append(args, "-e", sql)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, m.ClientPath(), args...)
+	hideWindow(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("创建用户/库失败: %v\n%s", err, textenc.ToUTF8(out))
+	}
+	return nil
+}
+
 // CreateDatabase via mysql client
 func (m MySQL) CreateDatabase(name, rootPwd string) error {
 	if !m.Status().Running {

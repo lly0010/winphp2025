@@ -678,6 +678,26 @@ func configPath(key string) string {
 func (a *App) MysqlSetPassword(newPwd string) error  { return a.mysql.SetRootPassword(newPwd) }
 func (a *App) MysqlCreateDb(name, pwd string) error  { return a.mysql.CreateDatabase(name, pwd) }
 
+// MysqlCreateUserInput 创建 MySQL 用户/库 的入参.
+type MysqlCreateUserInput struct {
+	RootPwd string `json:"rootPwd"` // root 密码 (无密码就传空串)
+	DbName  string `json:"dbName"`  // 想同时创建/授权的库名 (空就只建用户)
+	User    string `json:"user"`    // 新用户名
+	UserPwd string `json:"userPwd"` // 新用户密码
+	Host    string `json:"host"`    // 允许连接的主机 (默认 localhost, % 表示任意)
+}
+
+// MysqlCreateUser 创建用户 + 可选建库 + GRANT ALL.
+func (a *App) MysqlCreateUser(in MysqlCreateUserInput) error {
+	return a.mysql.CreateUser(in.RootPwd, in.DbName, in.User, in.UserPwd, in.Host)
+}
+
+// RedisGetPassword 返回 redis.windows.conf 里当前的 requirepass (空串 = 无密码).
+func (a *App) RedisGetPassword() string { return a.redis.Password() }
+
+// RedisSetPassword 改 Redis 密码. 空串表示移除. 运行中会立即生效.
+func (a *App) RedisSetPassword(newPwd string) error { return a.redis.SetPassword(newPwd) }
+
 // ============ PHP 扩展 ============
 
 func (a *App) PhpExtensions() []services.Extension       { return a.php.ListExtensions() }
