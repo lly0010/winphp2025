@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,6 +15,9 @@ import (
 	"github.com/lly0010/winphp2025/internal/proc"
 	"github.com/lly0010/winphp2025/internal/state"
 )
+
+// phpVerRe 匹配 "PHP 8.3.14" 这种版本头, 跳过 "PHP Warning"/"PHP Startup"/"PHP Notice" 这类污染行.
+var phpVerRe = regexp.MustCompile(`PHP\s+(\d+\.\d+(?:\.\d+)?)`)
 
 const PhpServiceName = "WinPHPPhp"
 
@@ -30,13 +34,11 @@ func (p PHP) Version() string {
 	}
 	out, err := runHidden(p.ExePath(), 3*time.Second, "-v")
 	if err == nil {
-		// First line: "PHP 8.3.14 (cli) ..."
-		if i := strings.Index(out, "PHP "); i >= 0 {
-			s := out[i+4:]
-			end := strings.IndexAny(s, " \r\n\t")
-			if end > 0 {
-				return s[:end]
-			}
+		// 用正则匹配 "PHP 8.3.14" 这类版本头. 不能用简单 strings.Index("PHP ")
+		// 因为输出可能先有 "PHP Warning"/"PHP Startup:" 之类的污染行
+		// (常见: 某个扩展加载失败), 那种行后面跟的不是版本号.
+		if m := phpVerRe.FindStringSubmatch(out); m != nil {
+			return m[1]
 		}
 	}
 	// php.exe 跑不起来 (常见: 缺 VC++ 2022 Redistributable),

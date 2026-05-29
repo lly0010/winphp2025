@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -69,9 +68,9 @@ func (p PHP) detectPhpInfo() (phpVer, vsTag string, err error) {
 	if err != nil {
 		return "", "", fmt.Errorf("php -v 失败: %w", err)
 	}
-	// 第一行: "PHP 8.3.14 (cli) (built: ...) (NTS Visual C++ 2019 x64)"
-	re := regexp.MustCompile(`PHP\s+(\d+\.\d+(?:\.\d+)?)`)
-	m := re.FindStringSubmatch(out)
+	// 第一行: "PHP 8.3.14 (cli) (built: ...) (NTS Visual C++ 2019 x64)".
+	// 用全局 phpVerRe (php.go) 来跳过 "PHP Warning"/"PHP Startup" 这类污染行.
+	m := phpVerRe.FindStringSubmatch(out)
 	if m == nil {
 		return "", "", fmt.Errorf("无法解析 PHP 版本: %s", strings.SplitN(out, "\n", 2)[0])
 	}
